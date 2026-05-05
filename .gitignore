@@ -1,0 +1,17 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+/dev-db.mv.db
+/dev-db.trace.db
+.idea/
+*.class
+.DS_Store
+.project
+.settings/
+.classpath
+bin/
+.metadata/
+*.log
+*.tmp
+*.bak
+*.swp
+*~
