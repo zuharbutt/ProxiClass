@@ -60,6 +60,14 @@ public class DataInitializer implements CommandLineRunner {
         System.out.println("=== NU Attendance System Started ===");
         System.out.println("Teachers: dr.ahmed / ms.fatima / prof.ali (password: password123)");
         System.out.println("Imported students from students_data/ (password: pass123)");
+        
+        // Manual override for testing
+        userRepository.findByRollNumber("24L-3068").ifPresent(u -> {
+            u.setBluetoothMac("9C:2E:7A:98:6F:75");
+            userRepository.save(u);
+            System.out.println("Registered BT MAC for 24L-3068");
+        });
+        
         System.out.println("=====================================");
     }
 

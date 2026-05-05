@@ -484,10 +484,24 @@
                 <div class="card-title">🔵 Bluetooth Scanning</div>
                 <div class="bt-status">
                   <div class="bt-indicator scanning" id="bt-indicator"></div>
-                  <div>
-                    <div id="bt-status-text" style="font-size:0.9rem;font-weight:500">Scanning for student devices...</div>
-                    <div style="font-size:0.75rem;color:var(--text2);font-family:var(--mono)">Students should open their portal and press Mark Present</div>
+                  <div class="field-group" style="display:flex; gap:1rem; margin-bottom:1rem">
+                  <div class="field" style="flex:1">
+                    <label>Hardware Status</label>
+                    <div id="bt-status" style="font-weight:600; color:var(--amber)">Ready to Scan</div>
                   </div>
+                  <div style="display:flex; gap:0.5rem; align-items:flex-end">
+                    <button class="btn btn-primary" onclick="toggleBluetooth()">✨ Start Scan</button>
+                    <button class="btn btn-secondary" title="Verify if an ID is registered in database" onclick="testDetection()">🔍 Check DB</button>
+                  </div>
+                </div>
+                
+                <!-- Visibility Guide -->
+                <div style="background:rgba(0,0,0,0.2); padding:0.8rem; border-radius:8px; margin-bottom:1rem; border-left:4px solid var(--amber)">
+                  <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.3rem">💡 Student phone not appearing?</div>
+                  <div style="font-size:0.75rem; color:var(--text2); line-height:1.4">
+                    The student <strong>MUST</strong> open their <strong>Bluetooth Settings</strong> screen for the phone to become visible. Once they close that screen, they disappear!
+                  </div>
+                </div>
                   <button class="btn btn-secondary btn-sm" id="bt-toggle-btn" onclick="toggleBluetooth()" style="margin-left:auto">Stop Scan</button>
                 </div>
                 <div class="bt-feed-container" style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem">
@@ -613,11 +627,19 @@
         <div class="nav-item" onclick="switchPanel('s-attendance', this); loadStudentHistory()">📊 My Attendance</div>
         <div class="nav-divider"></div>
         <div class="nav-section">Settings</div>
-        <div class="nav-item" onclick="switchPanel('s-device', this)">📱 My Device</div>
+            <div class="nav-item" onclick="switchPanel('s-device', this)">📱 My Device</div>
       </div>
       <div class="content">
 
         <!-- Student Home -->
+        <div class="section-header">
+          <h2 id="s-welcome-title">Welcome Student</h2>
+          <div id="s-attendance-status" class="card" style="margin-top:1rem; border-left:5px solid var(--red); padding:1rem">
+              <div style="font-size:0.8rem; color:var(--text2); text-transform:uppercase; letter-spacing:1px">Current Session Status</div>
+              <div id="s-status-text" style="font-size:1.5rem; font-weight:700; color:var(--red)">ABSENT</div>
+              <div id="s-session-info" style="font-size:0.85rem; margin-top:0.3rem">No active class session detected</div>
+          </div>
+        </div>
         <div class="panel active" id="s-home">
           <div class="panel-title" id="s-greeting">Welcome</div>
           <div class="panel-subtitle" id="s-roll-display">Roll Number</div>
@@ -688,13 +710,16 @@
               <div id="device-status" style="margin-bottom:1rem; font-size:0.9rem; padding:1rem; background:rgba(0,0,0,0.2); border-radius:8px">
                 Loading status...
               </div>
-              <div style="display:flex; gap:0.5rem">
+              <div style="display:flex; flex-direction:column; gap:0.8rem">
                 <button class="btn btn-primary" id="reg-device-btn" onclick="registerBluetoothDevice()">
                   ✨ Register via Picker
                 </button>
                 <button class="btn btn-secondary" onclick="manualRegisterDevice()">
                   ⌨️ Manual Entry
                 </button>
+                <div style="font-size:0.75rem; color:var(--amber); border:1px solid rgba(255,191,0,0.2); padding:0.5rem; border-radius:4px">
+                  <strong>⚠️ Tip:</strong> To be detected by the teacher, you must keep your <strong>Bluetooth Settings</strong> screen open during class.
+                </div>
               </div>
             </div>
           <div class="card">
@@ -775,8 +800,11 @@ async function studentLogin() {
     document.getElementById('s-greeting').textContent = `Welcome, ${res.fullName.split(' ')[0]}`;
     document.getElementById('s-roll-display').textContent = res.rollNumber;
     showPage('student-app');
+    document.getElementById('student-app').style.display = 'flex'; // HARD FORCE
+    switchPanel('s-home');
     loadStudentActiveSessions();
     loadDeviceInfo();
+    startStudentAutoCheckin();
   } catch(e) {
     err.textContent = e.message || 'Login failed';
   }
@@ -1080,43 +1108,112 @@ function cancelSession() {
 let bluetoothScan = null;
 
 async function toggleBluetooth() {
-  const rawFeed = document.getElementById('bt-raw-feed');
+  const status = document.getElementById('bt-status');
   try {
+    // Hardware Diagnostic
     if (!navigator.bluetooth) {
-      throw new Error('Web Bluetooth is not supported. Use Chrome/Edge.');
+      throw new Error('Web Bluetooth is not supported. Please use Chrome/Edge and enable flags.');
     }
     
-    logBt('Opening browser picker...');
+    const available = await navigator.bluetooth.getAvailability();
+    if (!available) {
+      logBt('<strong>⚠️ Hardware Error:</strong> Bluetooth is turned OFF on your laptop.');
+      throw new Error('Please turn ON Bluetooth in your Windows settings.');
+    }
+    
+    status.textContent = 'Opening Picker...';
+    status.style.color = 'var(--blue)';
+    logBt('<strong>[BT]</strong> Searching... Please look at the browser popup.');
+    logBt('<em>Tip: Students must have their Bluetooth Settings screen open to be seen.</em>');
     
     const device = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
       optionalServices: [
         'battery_service', 
         'device_information',
-        'generic_access',
-        'heart_rate'
+        'generic_access'
       ]
     });
 
-    logBt(`Selected: ${device.name || 'Unknown'} (${device.id})`);
+    logBt(`Device Picked: <strong>${device.name || 'Unknown'}</strong>`);
+    logBt(`ID Detected: <span style="color:var(--amber)">${device.id}</span>`);
     
     const deviceId = device.id;
+    status.textContent = 'Matching...';
+
     const res = await apiFetch(`/api/teacher/session/${activeSessionId}/detect`, 'POST', { deviceId });
+    
     if (res.success) {
-      toast(`Detected: ${res.rollNumber}`, 'success');
+      status.textContent = 'Match Found!';
+      status.style.color = 'var(--green)';
+      toast(`Success: ${res.rollNumber} marked present!`, 'success');
+      logBt(`✅ Match Found: <strong>${res.rollNumber}</strong> (${res.fullName})`);
     } else {
+      status.textContent = 'No Match';
+      status.style.color = 'var(--red)';
       toast(res.message, 'warning');
-      logBt(`Backend: ${res.message}`);
+      logBt(`❌ Backend Result: ${res.message}`);
     }
     
   } catch (e) {
+    status.textContent = 'Inactive';
+    status.style.color = 'var(--amber)';
     if (e.name === 'NotFoundError') {
-      logBt('User cancelled the picker.');
+      logBt('Scan cancelled by user.');
     } else {
-      logBt(`Error: ${e.message}`);
+      logBt(`⚠️ Error: ${e.message}`);
       toast(e.message, 'error');
     }
   }
+}
+
+// --- ZERO INTERACTION AUTOMATION ---
+async function startTeacherBeacon() {
+  const status = document.getElementById('bt-status');
+  try {
+    logBt('<strong>[Auto]</strong> Teacher Beacon Active. Students will detect you automatically.');
+    status.textContent = 'Beacon Active';
+    status.style.color = 'var(--green)';
+    document.getElementById('bt-indicator').classList.add('scanning');
+    
+    // Heartbeat for proximity
+    setInterval(async () => {
+      if (activeSessionId) {
+        await apiFetch(`/api/teacher/session/${activeSessionId}/heartbeat`, 'POST', {});
+      }
+    }, 5000);
+  } catch (e) { logBt(`⚠️ Beacon Error: ${e.message}`); }
+}
+
+async function testDetection() {
+  const id = prompt("Enter a Device ID or MAC to test (e.g. your registered ID):");
+  if (!id) return;
+  
+  logBt(`Testing manual ID: ${id}`);
+  try {
+    const res = await apiFetch(`/api/teacher/session/${activeSessionId}/detect-bulk`, 'POST', [id]);
+    if (res.success) {
+      toast(`Test Success!`, 'success');
+      logBt(`✅ Test Result: Match processed.`);
+    } else {
+      toast(`Test Fail: ${res.message}`, 'warning');
+    }
+  } catch(e) {
+    logBt(`❌ Test Error: ${e.message}`);
+  }
+}
+
+async function startStudentAutoCheckin() {
+  logBt('<strong>[Auto]</strong> Proximity Checkin Active. Looking for teacher...');
+  setInterval(async () => {
+    if (role === 'STUDENT' && token) {
+      const sessions = await apiFetch('/api/student/sessions/active');
+      if (sessions.length > 0) {
+        const s = sessions[0];
+        await apiFetch(`/api/student/session/${s.id}/ping`, 'POST', {});
+      }
+    }
+  }, 10000);
 }
 
 function logBt(msg) {

@@ -174,13 +174,29 @@ public class AttendanceService {
             return Map.of("success", false, "message", "Session is not active");
         }
 
-        // Find student by MAC
-        Optional<User> studentOpt = userRepository.findByBluetoothMac(deviceId);
-        if (studentOpt.isEmpty()) {
-            return Map.of("success", false, "message", "Device not registered to any student", "deviceId", deviceId);
+        // Find student by MAC (Fuzzy Match: ignore case and special chars)
+        String cleanId = deviceId.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+        
+        List<User> allStudents = userRepository.findByRole(User.Role.STUDENT);
+        User student = null;
+        for (User s : allStudents) {
+            if (s.getBluetoothMac() != null && !s.getBluetoothMac().isEmpty()) {
+                String cleanStudentMac = s.getBluetoothMac().replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+                if (cleanStudentMac.equals(cleanId)) {
+                    student = s;
+                    break;
+                }
+            }
         }
 
-        User student = studentOpt.get();
+        if (student == null) {
+            System.out.println("[BT-DEBUG] Failed to match: " + cleanId);
+            // Print a few registered ones for comparison
+            allStudents.stream().filter(u -> u.getBluetoothMac() != null).limit(3)
+                .forEach(u -> System.out.println("  Registered: " + u.getRollNumber() + " -> " + u.getBluetoothMac()));
+            
+            return Map.of("success", false, "message", "Device not registered to any student", "deviceId", deviceId);
+        }
 
         // Check if student is in the session's section
         if (!student.getSection().equalsIgnoreCase(session.getSection())) {
@@ -188,11 +204,12 @@ public class AttendanceService {
         }
 
         // Mark student present
-        Optional<AttendanceRecord> recordOpt = attendanceRecordRepository.findBySessionAndStudent(session, student);
+        final User finalStudent = student;
+        Optional<AttendanceRecord> recordOpt = attendanceRecordRepository.findBySessionAndStudent(session, finalStudent);
         AttendanceRecord record = recordOpt.orElseGet(() -> {
             AttendanceRecord r = new AttendanceRecord();
             r.setSession(session);
-            r.setStudent(student);
+            r.setStudent(finalStudent);
             return r;
         });
 

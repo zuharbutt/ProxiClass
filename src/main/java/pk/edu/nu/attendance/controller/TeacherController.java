@@ -111,12 +111,16 @@ public class TeacherController {
         }
     }
 
-    // Automated device detection from Bluetooth scan
-    @PostMapping("/session/{sessionId}/detect")
-    public ResponseEntity<?> detectDevice(@PathVariable Long sessionId, @RequestBody Map<String, String> body) {
+    // Automated bulk detection from external bridge script
+    @PostMapping("/session/{sessionId}/detect-bulk")
+    public ResponseEntity<?> detectBulk(@PathVariable Long sessionId, @RequestBody List<String> deviceIds) {
         try {
-            String deviceId = body.get("deviceId");
-            return ResponseEntity.ok(attendanceService.markDevicePresent(sessionId, deviceId));
+            for (String id : deviceIds) {
+                try {
+                    attendanceService.markDevicePresent(sessionId, id);
+                } catch (Exception e) { /* skip individual errors */ }
+            }
+            return ResponseEntity.ok(Map.of("success", true, "processed", deviceIds.size()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
