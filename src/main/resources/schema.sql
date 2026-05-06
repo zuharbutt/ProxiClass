@@ -23,6 +23,8 @@ CREATE TABLE sessions (
     end_time DATETIME2,
     status VARCHAR(50),
     attendance_mode VARCHAR(50),
+    teacher_lat FLOAT,
+    teacher_lng FLOAT,
     FOREIGN KEY (teacher_id) REFERENCES users(id)
 );
 

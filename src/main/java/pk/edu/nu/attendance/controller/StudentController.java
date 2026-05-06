@@ -3,6 +3,7 @@ package pk.edu.nu.attendance.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import pk.edu.nu.attendance.dto.Dtos;
 import pk.edu.nu.attendance.model.User;
 import pk.edu.nu.attendance.repository.UserRepository;
 import pk.edu.nu.attendance.service.AttendanceService;
@@ -28,10 +29,13 @@ public class StudentController {
 
     // Student marks themselves present via Bluetooth ping
     @PostMapping("/attendance/ping")
-    public ResponseEntity<?> bluetoothPing(Principal principal) {
+    public ResponseEntity<?> bluetoothPing(@RequestBody(required = false) Dtos.PingRequest req,
+                                           Principal principal) {
         try {
             User student = getStudent(principal);
-            Map<String, Object> result = attendanceService.studentBluetoothPing(student);
+            Double lat = req != null ? req.getStudentLat() : null;
+            Double lng = req != null ? req.getStudentLng() : null;
+            Map<String, Object> result = attendanceService.studentBluetoothPing(student, lat, lng);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

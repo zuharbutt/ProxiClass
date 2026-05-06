@@ -35,7 +35,8 @@ public class TeacherController {
         try {
             User teacher = getTeacher(principal);
             Dtos.SessionDto session = attendanceService.createSession(
-                teacher, req.getCourseName(), req.getSection(), req.getAttendanceMode()
+                teacher, req.getCourseName(), req.getSection(), req.getAttendanceMode(),
+                req.getTeacherLat(), req.getTeacherLng()
             );
             return ResponseEntity.ok(session);
         } catch (Exception e) {

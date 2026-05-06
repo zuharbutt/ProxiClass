@@ -12,8 +12,18 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import java.util.concurrent.ConcurrentHashMap;
+
 @Service
 public class AttendanceService {
+
+    private final Map<Long, Set<String>> sessionAttendance = new ConcurrentHashMap<>();
+    private final Map<String, String> activeDeviceRegistry = new ConcurrentHashMap<>(); // MAC -> RollNumber
+
+    public void registerActiveDevice(String rollNumber, String deviceId) {
+        if (deviceId == null) return;
+        activeDeviceRegistry.put(deviceId.replaceAll("[:\\-]", "").toLowerCase(), rollNumber);
+    }
 
     @Autowired
     private SessionRepository sessionRepository;
@@ -30,7 +40,7 @@ public class AttendanceService {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     // Create a new attendance session
-    public Dtos.SessionDto createSession(User teacher, String courseName, String section, String mode) {
+    public Dtos.SessionDto createSession(User teacher, String courseName, String section, String mode, Double teacherLat, Double teacherLng) {
         Session session = new Session();
         session.setCourseName(courseName);
         session.setSection(section);
@@ -38,6 +48,8 @@ public class AttendanceService {
         session.setStartTime(LocalDateTime.now());
         session.setStatus(Session.SessionStatus.ACTIVE);
         session.setAttendanceMode(Session.AttendanceMode.valueOf(mode));
+        session.setTeacherLat(teacherLat);
+        session.setTeacherLng(teacherLng);
         Session saved = sessionRepository.save(session);
 
         // Pre-populate all students in section as ABSENT
@@ -53,6 +65,79 @@ public class AttendanceService {
         }
 
         return toSessionDto(saved);
+    }
+
+    // Student is in class — mark present based on login identity + GPS proximity check
+    public Map<String, Object> studentBluetoothPing(User student, Double studentLat, Double studentLng) {
+        // 1. Find active session for this student's section
+        List<Session> activeSessions = sessionRepository.findByStatus(Session.SessionStatus.ACTIVE);
+        Session session = activeSessions.stream()
+            .filter(s -> s.getSection().equals(student.getSection()))
+            .findFirst()
+            .orElse(null);
+
+        if (session == null) {
+            return Map.of("success", false, "message", "No active session for your section");
+        }
+
+        // 2. STEP 1: Student must always share their location — no exceptions
+        if (studentLat == null || studentLng == null) {
+            return Map.of("success", false,
+                "message", "📍 Location access required. Please allow location in your browser to mark attendance.");
+        }
+
+        // 3. STEP 2: If teacher stored their location, enforce the 50 m proximity rule
+        if (session.getTeacherLat() != null && session.getTeacherLng() != null) {
+            double distance = haversineDistance(
+                session.getTeacherLat(), session.getTeacherLng(),
+                studentLat, studentLng
+            );
+            if (distance > 50.0) {
+                return Map.of("success", false,
+                    "message", String.format("❌ Too far — you are %.0f m away. Must be within 50 m of classroom.", distance),
+                    "distance", Math.round(distance));
+            }
+        }
+        // If teacher did not share location → proximity check skipped (graceful degradation)
+
+        // 3. Already marked present
+        Optional<AttendanceRecord> recordOpt = attendanceRecordRepository.findBySessionAndStudent(session, student);
+        if (recordOpt.isPresent() && recordOpt.get().getStatus() == AttendanceRecord.AttendanceStatus.PRESENT) {
+            return Map.of("success", true, "message", "You are already marked PRESENT", "courseName", session.getCourseName());
+        }
+
+        // 4. Mark present
+        AttendanceRecord record = recordOpt.orElseGet(() -> {
+            AttendanceRecord r = new AttendanceRecord();
+            r.setSession(session);
+            r.setStudent(student);
+            return r;
+        });
+        record.setStatus(AttendanceRecord.AttendanceStatus.PRESENT);
+        record.setMarkMethod(AttendanceRecord.MarkMethod.BLUETOOTH);
+        record.setMarkedAt(LocalDateTime.now());
+        record.setDetectedMac("APP-LOGIN");
+        attendanceRecordRepository.save(record);
+
+        // 5. Broadcast to teacher dashboard
+        Dtos.BluetoothDetectedEvent event = new Dtos.BluetoothDetectedEvent(
+            student.getRollNumber(), student.getFullName(), "App Login",
+            LocalDateTime.now().format(FORMATTER)
+        );
+        messagingTemplate.convertAndSend("/topic/bluetooth/" + session.getId(), event);
+
+        return Map.of("success", true, "message", "You are now marked PRESENT", "courseName", session.getCourseName());
+    }
+
+    /** Haversine formula — returns distance in metres between two GPS coordinates */
+    private double haversineDistance(double lat1, double lon1, double lat2, double lon2) {
+        final double R = 6371000.0; // Earth radius in metres
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                 * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     // Get active sessions
@@ -118,52 +203,6 @@ public class AttendanceService {
         return getAttendanceSummary(sessionId);
     }
 
-    // Bluetooth: student marks themselves present
-    public Map<String, Object> studentBluetoothPing(User student) {
-        // Find an active session matching this student's section
-        List<Session> activeSessions = sessionRepository.findBySectionAndStatus(
-            student.getSection(), Session.SessionStatus.ACTIVE
-        );
-
-        if (activeSessions.isEmpty()) {
-            return Map.of("success", false, "message", "No active session found for your section");
-        }
-
-        Session session = activeSessions.get(0);
-
-        // Mark student present
-        Optional<AttendanceRecord> existingOpt = attendanceRecordRepository.findBySessionAndStudent(session, student);
-        AttendanceRecord record;
-        if (existingOpt.isPresent()) {
-            record = existingOpt.get();
-        } else {
-            record = new AttendanceRecord();
-            record.setSession(session);
-            record.setStudent(student);
-        }
-
-        if (record.getStatus() == AttendanceRecord.AttendanceStatus.PRESENT) {
-            return Map.of("success", true, "message", "Already marked present", "alreadyMarked", true);
-        }
-
-        record.setStatus(AttendanceRecord.AttendanceStatus.PRESENT);
-        record.setMarkMethod(AttendanceRecord.MarkMethod.BLUETOOTH);
-        record.setMarkedAt(LocalDateTime.now());
-        record.setDetectedMac(student.getBluetoothMac());
-        attendanceRecordRepository.save(record);
-
-        // Broadcast via WebSocket to teacher
-        Dtos.BluetoothDetectedEvent event = new Dtos.BluetoothDetectedEvent(
-            student.getRollNumber(),
-            student.getFullName(),
-            student.getBluetoothMac(),
-            LocalDateTime.now().format(FORMATTER)
-        );
-        messagingTemplate.convertAndSend("/topic/bluetooth/" + session.getId(), event);
-
-        return Map.of("success", true, "message", "Attendance marked successfully",
-                      "sessionId", session.getId(), "courseName", session.getCourseName());
-    }
 
     // Teacher-side automated detection
     public Map<String, Object> markDevicePresent(Long sessionId, String deviceId) {
@@ -174,27 +213,32 @@ public class AttendanceService {
             return Map.of("success", false, "message", "Session is not active");
         }
 
-        // Find student by MAC (Fuzzy Match: ignore case and special chars)
-        String cleanId = deviceId.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+        String cleanId = deviceId.replaceAll("[:\\-]", "").toLowerCase();
         
-        List<User> allStudents = userRepository.findByRole(User.Role.STUDENT);
-        User student = null;
-        for (User s : allStudents) {
-            if (s.getBluetoothMac() != null && !s.getBluetoothMac().isEmpty()) {
-                String cleanStudentMac = s.getBluetoothMac().replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
-                if (cleanStudentMac.equals(cleanId)) {
-                    student = s;
-                    break;
-                }
+        // 1. Try matching against permanent database registration (MAC/ID)
+        User student = userRepository.findByBluetoothMac(deviceId).orElse(null);
+
+        // 2. Try matching against "Active Login Sessions"
+        if (student == null) {
+            String roll = activeDeviceRegistry.get(cleanId);
+            if (roll != null) {
+                student = userRepository.findByRollNumber(roll).orElse(null);
             }
         }
 
+        // 3. NEW: Smart Name Matching (Pure Bluetooth)
+        // If deviceId is actually a Name (which some scanners provide)
         if (student == null) {
-            System.out.println("[BT-DEBUG] Failed to match: " + cleanId);
-            // Print a few registered ones for comparison
-            allStudents.stream().filter(u -> u.getBluetoothMac() != null).limit(3)
-                .forEach(u -> System.out.println("  Registered: " + u.getRollNumber() + " -> " + u.getBluetoothMac()));
-            
+            String potentialName = deviceId.toLowerCase();
+            List<User> allStudents = userRepository.findByRole(User.Role.STUDENT);
+            student = allStudents.stream()
+                .filter(s -> s.getFullName().toLowerCase().contains(potentialName) || 
+                        potentialName.contains(s.getFullName().toLowerCase().split(" ")[0]))
+                .findFirst()
+                .orElse(null);
+        }
+
+        if (student == null) {
             return Map.of("success", false, "message", "Device not registered to any student", "deviceId", deviceId);
         }
 
@@ -295,6 +339,7 @@ public class AttendanceService {
     public Map<String, Object> registerDevice(User student, String mac) {
         student.setBluetoothMac(mac);
         userRepository.save(student);
+        registerActiveDevice(student.getRollNumber(), mac); // Added for dynamic matching
         return Map.of("success", true, "message", "Device registered successfully", "mac", mac);
     }
 

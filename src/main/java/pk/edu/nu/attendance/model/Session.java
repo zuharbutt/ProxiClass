@@ -47,6 +47,12 @@ public class Session {
     @Enumerated(EnumType.STRING)
     private AttendanceMode attendanceMode;
 
+    @Column(name = "teacher_lat")
+    private Double teacherLat;
+
+    @Column(name = "teacher_lng")
+    private Double teacherLng;
+
     public enum SessionStatus {
         ACTIVE, COMPLETED, CANCELLED
     }
@@ -70,4 +76,8 @@ public class Session {
     public void setStatus(SessionStatus status) { this.status = status; }
     public AttendanceMode getAttendanceMode() { return attendanceMode; }
     public void setAttendanceMode(AttendanceMode attendanceMode) { this.attendanceMode = attendanceMode; }
+    public Double getTeacherLat() { return teacherLat; }
+    public void setTeacherLat(Double teacherLat) { this.teacherLat = teacherLat; }
+    public Double getTeacherLng() { return teacherLng; }
+    public void setTeacherLng(Double teacherLng) { this.teacherLng = teacherLng; }
 }

@@ -1,57 +1,130 @@
 import asyncio
-import requests
+import urllib.request
+import json
 import time
 from bleak import BleakScanner
 
-# CONFIGURATION
-JAVA_API_URL = "http://localhost:8080/api/teacher/session/{}/detect-bulk"
-SCAN_INTERVAL = 10  # Seconds between scans
+# ── Configuration ──────────────────────────────────────────────────────
+SERVER_URL  = "http://localhost:8080"
+SCAN_INTERVAL = 8.0   # seconds between scans
+POLL_INTERVAL = 5.0   # seconds between polling for an active session
 
-async def run_automation_bridge():
-    print("=== Bluetooth Attendance Automation Bridge ===")
-    print("Scanning for students every {} seconds...".format(SCAN_INTERVAL))
-    print("Make sure you have an active session in the browser!")
+# Credentials for a teacher account (needed to call teacher APIs)
+# The bridge uses a shared service token — using dr.ahmed as default
+TEACHER_USERNAME = "dr.ahmed"
+TEACHER_PASSWORD = "password123"
+
+token = None   # JWT token, fetched at startup
+
+# ── Auth ───────────────────────────────────────────────────────────────
+def login():
+    global token
+    url  = f"{SERVER_URL}/api/auth/teacher/login"
+    body = json.dumps({"username": TEACHER_USERNAME, "password": TEACHER_PASSWORD}).encode()
+    req  = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req) as r:
+            data  = json.loads(r.read().decode())
+            token = data.get("token")
+            print(f"✅ Logged in as {TEACHER_USERNAME}")
+    except Exception as e:
+        print(f"❌ Login failed: {e}")
+
+def api_get(path):
+    req = urllib.request.Request(f"{SERVER_URL}{path}")
+    req.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read().decode())
+
+def api_post(path, body=None):
+    data = json.dumps(body or {}).encode()
+    req  = urllib.request.Request(f"{SERVER_URL}{path}", data=data, method="POST")
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read().decode())
+
+# ── Helpers ────────────────────────────────────────────────────────────
+def get_active_session():
+    """Returns the first active session ID, or None."""
+    try:
+        sessions = api_get("/api/teacher/sessions/active")
+        if sessions:
+            s = sessions[0]
+            return s["id"], s.get("courseName", ""), s.get("section", "")
+    except Exception as e:
+        print(f"⚠️  Could not fetch sessions: {e}")
+    return None, None, None
+
+def send_devices(session_id, device_addresses):
+    if not device_addresses:
+        return
+    try:
+        result = api_post(f"/api/teacher/session/{session_id}/detect-bulk", device_addresses)
+        processed = result.get("processed", 0)
+        print(f"   → Sent {len(device_addresses)} MACs to server (processed={processed})")
+    except Exception as e:
+        print(f"   ❌ Error sending to server: {e}")
+
+# ── Main Scanner ───────────────────────────────────────────────────────
+async def run():
+    print("╔══════════════════════════════════════════════╗")
+    print("║  📡  NU Bluetooth Auto-Attendance Bridge     ║")
+    print("╚══════════════════════════════════════════════╝")
+
+    # 1. Authenticate
+    login()
+    if not token:
+        print("Cannot continue without a valid token. Check credentials.")
+        return
+
+    print("Waiting for teacher to start a session...\n")
+
+    current_session = None
 
     while True:
+        # 2. Poll for an active session
+        session_id, course, section = get_active_session()
+
+        if not session_id:
+            if current_session is not None:
+                print("ℹ️  Session ended. Waiting for next session...")
+                current_session = None
+            await asyncio.sleep(POLL_INTERVAL)
+            continue
+
+        if session_id != current_session:
+            print(f"\n🟢 Active Session Detected!")
+            print(f"   Session ID : {session_id}")
+            print(f"   Course     : {course}")
+            print(f"   Section    : {section}")
+            print(f"   Scanning every {SCAN_INTERVAL}s...\n")
+            current_session = session_id
+
+        # 3. Scan for nearby Bluetooth devices
         try:
-            # 1. Get Active Sessions from Java
-            res = requests.get("http://localhost:8080/api/teacher/sessions/active")
-            active_sessions = res.json()
-            
-            if not active_sessions:
-                print("[INFO] Waiting for teacher to start a session in the browser...")
-                await asyncio.sleep(5)
-                continue
-
-            # 2. Scan for all nearby Bluetooth devices
-            print("[SCAN] Searching for devices...")
+            print(f"🔍 Scanning for Bluetooth devices...")
             devices = await BleakScanner.discover(timeout=5.0)
-            
-            # Extract all MAC addresses/IDs found
-            found_ids = [d.address for d in devices]
-            print("[SCAN] Found {} devices nearby.".format(len(found_ids)))
+            addresses = [d.address for d in devices]
 
-            # 3. Send all found IDs to every active session
-            for session in active_sessions:
-                session_id = session['id']
-                target_url = JAVA_API_URL.format(session_id)
-                
-                try:
-                    # Send as bulk list
-                    post_res = requests.post(target_url, json=found_ids)
-                    if post_res.status_code == 200:
-                        print("[SYNC] Sent detections to session: {}".format(session['courseName']))
-                except Exception as e:
-                    print("[ERR] Failed to sync with Java: {}".format(e))
+            if devices:
+                for d in devices:
+                    name = d.name or "Unknown"
+                    print(f"   📱 Found: {d.address}  ({name})")
+            else:
+                print("   (no devices found nearby)")
+
+            send_devices(session_id, addresses)
 
         except Exception as e:
-            print("[ERR] Bridge Error: {}".format(e))
-            print("Make sure the Java backend is running at localhost:8080")
+            print(f"⚠️  Scan error: {e}")
 
+        print(f"⏲️  Next scan in {SCAN_INTERVAL}s...")
         await asyncio.sleep(SCAN_INTERVAL)
 
 if __name__ == "__main__":
     try:
-        asyncio.run(run_automation_bridge())
+        asyncio.run(run())
     except KeyboardInterrupt:
-        print("\nStopping automation bridge...")
+        print("\n👋 Scanner stopped.")

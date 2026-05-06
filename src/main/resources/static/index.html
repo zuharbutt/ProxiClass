@@ -470,7 +470,8 @@
                 <span style="color:var(--green)">● ACTIVE SESSION</span>
                 <span id="active-course" style="margin-left:auto;font-weight:300;font-family:var(--mono);font-size:0.8rem"></span>
               </div>
-              <div style="display:flex;gap:1.5rem;margin-bottom:1rem;font-family:var(--mono);font-size:0.8rem;color:var(--text2)">
+              <div style="display:flex;gap:1.5rem;margin-bottom:1rem;font-family:var(--mono);font-size:0.8rem;color:var(--text2);flex-wrap:wrap;align-items:center">
+                <span>Session ID: <span id="active-session-id" style="color:var(--amber);background:rgba(255,171,0,0.1);padding:0.15rem 0.5rem;border-radius:4px;border:1px solid rgba(255,171,0,0.3)">—</span></span>
                 <span>Section: <span id="active-section" style="color:var(--text)"></span></span>
                 <span>Mode: <span id="active-mode-label" style="color:var(--amber)"></span></span>
                 <span>Present: <span id="active-present" style="color:var(--green)">0</span> / <span id="active-total"></span></span>
@@ -602,6 +603,17 @@
               </table>
             </div>
           </div>
+          <div class="card" style="border-color:var(--blue)">
+            <div class="card-title">🧪 Testing & Radar</div>
+            <p style="font-size:0.8rem; color:var(--text2); margin-bottom:1rem">
+              Use the Radar for automatic Bluetooth detection (requires Chrome Flag).
+            </p>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem">
+              <button class="btn btn-blue" onclick="simulateTestMatch()">🚀 Simulate</button>
+              <button id="radar-btn" class="btn btn-green" onclick="startBluetoothRadar()">📡 Start Radar</button>
+            </div>
+            <div id="radar-status" style="font-size:0.7rem; color:var(--text2); margin-top:0.5rem; text-align:center">Radar is OFF</div>
+          </div>
         </div>
 
       </div>
@@ -703,31 +715,40 @@
         <div class="panel" id="s-device">
           <div class="panel-title">📱 Register My Device</div>
           <p style="color:var(--text2); margin-bottom:1.5rem; font-size:0.9rem">
-            To use automated attendance, you must register your phone's Bluetooth ID. Click the button below and select your phone from the list.
+            Register your phone's real Bluetooth MAC address so the teacher's scanner can detect you automatically.
           </p>
-            <div class="card" style="border-color:var(--amber)">
-              <div class="card-title">Device Link</div>
-              <div id="device-status" style="margin-bottom:1rem; font-size:0.9rem; padding:1rem; background:rgba(0,0,0,0.2); border-radius:8px">
-                Loading status...
+
+          <!-- Registered MAC Status -->
+          <div class="card" style="border-color:var(--amber)">
+            <div class="card-title">🔗 Current Registration</div>
+            <div id="device-status" style="margin-bottom:1rem; font-size:0.9rem; padding:1rem; background:rgba(0,0,0,0.2); border-radius:8px">
+              Loading status...
+            </div>
+            <button class="btn btn-primary" onclick="manualRegisterDevice()" style="width:100%">
+              ✏️ Enter / Update Bluetooth MAC
+            </button>
+          </div>
+
+          <!-- How to find MAC -->
+          <div class="card" style="border-color:var(--blue)">
+            <div class="card-title">📋 How to Find Your Bluetooth MAC Address</div>
+            <div style="font-size:0.85rem; color:var(--text2); line-height:1.7">
+              <div style="margin-bottom:0.75rem; padding:0.6rem; background:rgba(41,121,255,0.08); border-radius:6px; border-left:3px solid var(--blue)">
+                <strong style="color:var(--text)">📱 Android:</strong><br>
+                Settings → About Phone → Status → Bluetooth Address
               </div>
-              <div style="display:flex; flex-direction:column; gap:0.8rem">
-                <button class="btn btn-primary" id="reg-device-btn" onclick="registerBluetoothDevice()">
-                  ✨ Register via Picker
-                </button>
-                <button class="btn btn-secondary" onclick="manualRegisterDevice()">
-                  ⌨️ Manual Entry
-                </button>
-                <div style="font-size:0.75rem; color:var(--amber); border:1px solid rgba(255,191,0,0.2); padding:0.5rem; border-radius:4px">
-                  <strong>⚠️ Tip:</strong> To be detected by the teacher, you must keep your <strong>Bluetooth Settings</strong> screen open during class.
-                </div>
+              <div style="margin-bottom:0.75rem; padding:0.6rem; background:rgba(41,121,255,0.08); border-radius:6px; border-left:3px solid var(--blue)">
+                <strong style="color:var(--text)">🍎 iPhone:</strong><br>
+                Settings → General → About → Bluetooth (shown as Wi-Fi Address on some models)
+              </div>
+              <div style="padding:0.6rem; background:rgba(41,121,255,0.08); border-radius:6px; border-left:3px solid var(--blue)">
+                <strong style="color:var(--text)">💻 Windows Laptop:</strong><br>
+                Settings → Bluetooth &amp; devices → More Bluetooth settings → Hardware tab → Address
               </div>
             </div>
-          <div class="card">
-            <div class="card-title">ℹ️ Important Privacy Note</div>
-            <p style="font-size:0.85rem; color:var(--text2)">
-              The browser will ask you to select a device. Please select your <strong>Smartphone</strong>. 
-              The system only saves your unique Bluetooth ID to recognize you in class. No other data is accessed.
-            </p>
+            <div style="margin-top:1rem; font-size:0.8rem; color:var(--amber); background:rgba(255,171,0,0.08); padding:0.75rem; border-radius:6px; border:1px solid rgba(255,171,0,0.2)">
+              <strong>⚠️ Format:</strong> Enter exactly as shown, e.g. <code style="font-family:var(--mono)">AA:BB:CC:DD:EE:FF</code>. The teacher's scanner matches this address.
+            </div>
           </div>
         </div>
 
@@ -800,7 +821,6 @@ async function studentLogin() {
     document.getElementById('s-greeting').textContent = `Welcome, ${res.fullName.split(' ')[0]}`;
     document.getElementById('s-roll-display').textContent = res.rollNumber;
     showPage('student-app');
-    document.getElementById('student-app').style.display = 'flex'; // HARD FORCE
     switchPanel('s-home');
     loadStudentActiveSessions();
     loadDeviceInfo();
@@ -902,19 +922,34 @@ async function startSession() {
   const mode = document.getElementById('att-mode').value;
   if (!course) { toast('Enter a course name', 'error'); return; }
 
+  // Get teacher's GPS location before starting
+  let teacherLat = null, teacherLng = null;
+  try {
+    const pos = await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 })
+    );
+    teacherLat = pos.coords.latitude;
+    teacherLng = pos.coords.longitude;
+    toast(`📍 Location captured (±${Math.round(pos.coords.accuracy)}m accuracy)`, 'success');
+  } catch (e) {
+    toast('⚠️ Location denied — proximity check disabled for this session', 'error');
+  }
+
   try {
     const session = await apiFetch('/api/teacher/session/start', 'POST', {
-      courseName: course, section, attendanceMode: mode
+      courseName: course, section, attendanceMode: mode,
+      teacherLat, teacherLng
     });
     activeSessionId = session.id;
     document.getElementById('active-course').textContent = course;
+    document.getElementById('active-session-id').textContent = session.id;
     document.getElementById('active-section').textContent = section;
     document.getElementById('active-mode-label').textContent = mode;
     document.getElementById('active-total').textContent = session.totalStudents;
     updateActiveCount();
 
     document.getElementById('step-create').style.display = 'none';
-    document.getElementById('manual-preview').style.display = 'none'; // Clear preview
+    document.getElementById('manual-preview').style.display = 'none';
     document.getElementById('step-active').style.display = 'block';
 
     if (mode === 'BLUETOOTH') {
@@ -1185,35 +1220,99 @@ async function startTeacherBeacon() {
   } catch (e) { logBt(`⚠️ Beacon Error: ${e.message}`); }
 }
 
-async function testDetection() {
-  const id = prompt("Enter a Device ID or MAC to test (e.g. your registered ID):");
-  if (!id) return;
-  
-  logBt(`Testing manual ID: ${id}`);
+async function startBluetoothRadar() {
+  if (!('bluetooth' in navigator) || !('requestLEScan' in navigator.bluetooth)) {
+    alert("Bluetooth Radar requires Chrome Experimental Features. Please enable: chrome://flags/#enable-experimental-web-platform-features");
+    return;
+  }
+
+  const btn = document.getElementById('radar-btn');
+  const status = document.getElementById('radar-status');
+
   try {
-    const res = await apiFetch(`/api/teacher/session/${activeSessionId}/detect-bulk`, 'POST', [id]);
-    if (res.success) {
-      toast(`Test Success!`, 'success');
-      logBt(`✅ Test Result: Match processed.`);
-    } else {
-      toast(`Test Fail: ${res.message}`, 'warning');
-    }
-  } catch(e) {
-    logBt(`❌ Test Error: ${e.message}`);
+    logBt("📡 Requesting Bluetooth Scan permission...");
+    const scan = await navigator.bluetooth.requestLEScan({
+      acceptAllAdvertisements: true,
+      keepRepeatedDevices: false
+    });
+
+    btn.disabled = true;
+    btn.textContent = "🛰️ Radar Active";
+    status.textContent = "Scanning for nearby devices...";
+    status.style.color = "var(--green)";
+
+    navigator.bluetooth.addEventListener('advertisementreceived', event => {
+      const deviceId = event.device.id;
+      const deviceName = event.device.name || "Unknown Device";
+      
+      logBt(`📡 Detected Signal: <span style="font-family:var(--mono)">${deviceName}</span> (${deviceId})`);
+      
+      // Send both Name and ID for matching
+      const payload = [deviceId, deviceName];
+      apiFetch(`/api/teacher/session/${activeSessionId}/detect-bulk`, 'POST', payload)
+        .then(res => {
+          if (res.success) logBt(`✅ Auto-Marked: ${res.rollNumber} (${res.fullName})`);
+        })
+        .catch(e => {});
+    });
+
+    logBt("✅ Radar is now monitoring the room.");
+  } catch (e) {
+    logBt(`❌ Radar Error: ${e.message}`);
+    alert("Could not start Radar: " + e.message);
   }
 }
 
-async function startStudentAutoCheckin() {
-  logBt('<strong>[Auto]</strong> Proximity Checkin Active. Looking for teacher...');
-  setInterval(async () => {
-    if (role === 'STUDENT' && token) {
-      const sessions = await apiFetch('/api/student/sessions/active');
-      if (sessions.length > 0) {
-        const s = sessions[0];
-        await apiFetch(`/api/student/session/${s.id}/ping`, 'POST', {});
-      }
+async function simulateTestMatch() {
+  const vid = localStorage.getItem('bt_virtual_id');
+  if (!vid) {
+    toast("No active student session found. Please log in as a student in an Incognito window first!", "warning");
+    return;
+  }
+  logBt(`<strong>[Sim]</strong> Simulating detection of: <em>${vid}</em>`);
+  try {
+    const res = await apiFetch(`/api/teacher/session/${activeSessionId}/detect-bulk`, 'POST', [vid]);
+    if (res.success) {
+      toast("Simulation Success!", "success");
+      logBt(`✅ Simulation: Match found and processed.`);
     }
-  }, 10000);
+  } catch(e) { logBt(`❌ Sim Error: ${e.message}`); }
+}
+
+async function startStudentAutoCheckin() {
+  async function getCoords() {
+    return new Promise((resolve) =>
+      navigator.geolocation.getCurrentPosition(
+        p => resolve({ studentLat: p.coords.latitude, studentLng: p.coords.longitude }),
+        () => resolve({ studentLat: null, studentLng: null }),
+        { timeout: 5000, maximumAge: 30000 }
+      )
+    );
+  }
+
+  async function doPing() {
+    if (role !== 'STUDENT' || !token) return;
+    try {
+      const coords = await getCoords();
+      const res = await apiFetch('/api/student/attendance/ping', 'POST', coords);
+      const statusEl = document.getElementById('s-status-text');
+      const sessionInfoEl = document.getElementById('s-session-info');
+      const statusCard = document.getElementById('s-attendance-status');
+      if (res.success) {
+        if (statusEl) { statusEl.textContent = 'PRESENT'; statusEl.style.color = 'var(--green)'; }
+        if (statusCard) statusCard.style.borderLeftColor = 'var(--green)';
+        if (sessionInfoEl) sessionInfoEl.textContent = `✅ Marked present for: ${res.courseName || 'Active Session'}`;
+      } else {
+        if (statusEl) { statusEl.textContent = 'ABSENT'; statusEl.style.color = 'var(--red)'; }
+        if (statusCard) statusCard.style.borderLeftColor = 'var(--red)';
+        const dist = res.distance ? ` (${res.distance}m away)` : '';
+        if (sessionInfoEl) sessionInfoEl.textContent = (res.message || 'No active session') + dist;
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  await doPing();
+  setInterval(doPing, 10000);
 }
 
 function logBt(msg) {
@@ -1369,11 +1468,22 @@ setInterval(() => {
 }, 10000);
 
 async function manualRegisterDevice() {
-  const mac = prompt("Enter your Device ID or Bluetooth MAC Address (e.g. AA:BB:CC:DD:EE:FF):");
+  const mac = prompt(
+    "Enter your Bluetooth MAC Address\n" +
+    "Android: Settings → About Phone → Status → Bluetooth Address\n" +
+    "iPhone: Settings → General → About → Bluetooth\n\n" +
+    "Format example: AA:BB:CC:DD:EE:FF"
+  );
   if (!mac) return;
+  const cleaned = mac.trim().toUpperCase();
+  // Basic MAC format validation
+  if (!/^([0-9A-F]{2}[:\-]){5}[0-9A-F]{2}$/i.test(cleaned)) {
+    toast('Invalid format. Use AA:BB:CC:DD:EE:FF', 'error');
+    return;
+  }
   try {
-    await apiFetch('/api/auth/student/register-device', 'POST', { bluetoothMac: mac.trim() });
-    toast('Device registered manually!', 'success');
+    await apiFetch('/api/auth/student/register-device', 'POST', { bluetoothMac: cleaned });
+    toast('✅ Bluetooth MAC registered! You will now be auto-detected in class.', 'success');
     loadDeviceInfo();
   } catch (e) { toast(e.message, 'error'); }
 }

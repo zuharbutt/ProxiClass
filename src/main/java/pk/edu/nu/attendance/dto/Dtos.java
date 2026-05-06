@@ -75,16 +75,29 @@ public class Dtos {
         private String courseName;
         private String section;
         private String attendanceMode;
+        private Double teacherLat;
+        private Double teacherLng;
         public CreateSessionRequest() {}
-        public CreateSessionRequest(String courseName, String section, String attendanceMode) {
-            this.courseName = courseName; this.section = section; this.attendanceMode = attendanceMode;
-        }
         public String getCourseName() { return courseName; }
         public void setCourseName(String courseName) { this.courseName = courseName; }
         public String getSection() { return section; }
         public void setSection(String section) { this.section = section; }
         public String getAttendanceMode() { return attendanceMode; }
         public void setAttendanceMode(String attendanceMode) { this.attendanceMode = attendanceMode; }
+        public Double getTeacherLat() { return teacherLat; }
+        public void setTeacherLat(Double teacherLat) { this.teacherLat = teacherLat; }
+        public Double getTeacherLng() { return teacherLng; }
+        public void setTeacherLng(Double teacherLng) { this.teacherLng = teacherLng; }
+    }
+
+    public static class PingRequest {
+        private Double studentLat;
+        private Double studentLng;
+        public PingRequest() {}
+        public Double getStudentLat() { return studentLat; }
+        public void setStudentLat(Double studentLat) { this.studentLat = studentLat; }
+        public Double getStudentLng() { return studentLng; }
+        public void setStudentLng(Double studentLng) { this.studentLng = studentLng; }
     }
 
     public static class SessionDto {
