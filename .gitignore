@@ -15,3 +15,8 @@ bin/
 *.bak
 *.swp
 *~
+
+ngrok.exe
+get-pip.py
+*.exe
+.venv/
