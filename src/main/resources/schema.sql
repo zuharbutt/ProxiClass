@@ -1,6 +1,6 @@
-DROP TABLE IF EXISTS attendance_records;
-DROP TABLE IF EXISTS sessions;
-DROP TABLE IF EXISTS users;
+IF OBJECT_ID('dbo.attendance_records', 'U') IS NOT NULL DROP TABLE attendance_records;
+IF OBJECT_ID('dbo.sessions', 'U') IS NOT NULL DROP TABLE sessions;
+IF OBJECT_ID('dbo.users', 'U') IS NOT NULL DROP TABLE users;
 
 CREATE TABLE users (
     id BIGINT IDENTITY(1,1) PRIMARY KEY,

@@ -17,13 +17,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class AttendanceService {
 
-    private final Map<Long, Set<String>> sessionAttendance = new ConcurrentHashMap<>();
-    private final Map<String, String> activeDeviceRegistry = new ConcurrentHashMap<>(); // MAC -> RollNumber
-
-    public void registerActiveDevice(String rollNumber, String deviceId) {
-        if (deviceId == null) return;
-        activeDeviceRegistry.put(deviceId.replaceAll("[:\\-]", "").toLowerCase(), rollNumber);
-    }
 
     @Autowired
     private SessionRepository sessionRepository;
@@ -204,81 +197,6 @@ public class AttendanceService {
     }
 
 
-    // Teacher-side automated detection
-    public Map<String, Object> markDevicePresent(Long sessionId, String deviceId) {
-        Session session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new RuntimeException("Session not found"));
-
-        if (session.getStatus() != Session.SessionStatus.ACTIVE) {
-            return Map.of("success", false, "message", "Session is not active");
-        }
-
-        String cleanId = deviceId.replaceAll("[:\\-]", "").toLowerCase();
-        
-        // 1. Try matching against permanent database registration (MAC/ID)
-        User student = userRepository.findByBluetoothMac(deviceId).orElse(null);
-
-        // 2. Try matching against "Active Login Sessions"
-        if (student == null) {
-            String roll = activeDeviceRegistry.get(cleanId);
-            if (roll != null) {
-                student = userRepository.findByRollNumber(roll).orElse(null);
-            }
-        }
-
-        // 3. NEW: Smart Name Matching (Pure Bluetooth)
-        // If deviceId is actually a Name (which some scanners provide)
-        if (student == null) {
-            String potentialName = deviceId.toLowerCase();
-            List<User> allStudents = userRepository.findByRole(User.Role.STUDENT);
-            student = allStudents.stream()
-                .filter(s -> s.getFullName().toLowerCase().contains(potentialName) || 
-                        potentialName.contains(s.getFullName().toLowerCase().split(" ")[0]))
-                .findFirst()
-                .orElse(null);
-        }
-
-        if (student == null) {
-            return Map.of("success", false, "message", "Device not registered to any student", "deviceId", deviceId);
-        }
-
-        // Check if student is in the session's section
-        if (!student.getSection().equalsIgnoreCase(session.getSection())) {
-            return Map.of("success", false, "message", "Student is not in this section", "rollNumber", student.getRollNumber());
-        }
-
-        // Mark student present
-        final User finalStudent = student;
-        Optional<AttendanceRecord> recordOpt = attendanceRecordRepository.findBySessionAndStudent(session, finalStudent);
-        AttendanceRecord record = recordOpt.orElseGet(() -> {
-            AttendanceRecord r = new AttendanceRecord();
-            r.setSession(session);
-            r.setStudent(finalStudent);
-            return r;
-        });
-
-        if (record.getStatus() == AttendanceRecord.AttendanceStatus.PRESENT) {
-            return Map.of("success", true, "message", "Already marked present", "rollNumber", student.getRollNumber());
-        }
-
-        record.setStatus(AttendanceRecord.AttendanceStatus.PRESENT);
-        record.setMarkMethod(AttendanceRecord.MarkMethod.BLUETOOTH);
-        record.setMarkedAt(LocalDateTime.now());
-        record.setDetectedMac(deviceId);
-        attendanceRecordRepository.save(record);
-
-        // Broadcast to teacher UI
-        Dtos.BluetoothDetectedEvent event = new Dtos.BluetoothDetectedEvent(
-            student.getRollNumber(),
-            student.getFullName(),
-            deviceId,
-            LocalDateTime.now().format(FORMATTER)
-        );
-        messagingTemplate.convertAndSend("/topic/bluetooth/" + session.getId(), event);
-
-        return Map.of("success", true, "message", "Student marked present via automated scan", "rollNumber", student.getRollNumber());
-    }
-
     // Get attendance summary for a session
     public Dtos.AttendanceSummaryDto getAttendanceSummary(Long sessionId) {
         Session session = sessionRepository.findById(sessionId)
@@ -339,7 +257,6 @@ public class AttendanceService {
     public Map<String, Object> registerDevice(User student, String mac) {
         student.setBluetoothMac(mac);
         userRepository.save(student);
-        registerActiveDevice(student.getRollNumber(), mac); // Added for dynamic matching
         return Map.of("success", true, "message", "Device registered successfully", "mac", mac);
     }
 

@@ -450,7 +450,7 @@
               <div class="field">
                 <label>Attendance Mode</label>
                 <select id="att-mode" onchange="updateManualPreview()">
-                  <option value="BLUETOOTH">🔵 Bluetooth (Automatic)</option>
+                  <option value="AUTO">📍 GPS Auto (Recommended)</option>
                   <option value="MANUAL">📝 Manual</option>
                 </select>
               </div>
@@ -479,45 +479,16 @@
               <div class="progress-bar"><div class="progress-fill" id="attend-progress" style="width:0%"></div></div>
             </div>
 
-            <!-- Bluetooth Mode -->
-            <div id="bt-mode-panel" style="display:none">
-              <div class="card">
-                <div class="card-title">🔵 Bluetooth Scanning</div>
-                <div class="bt-status">
-                  <div class="bt-indicator scanning" id="bt-indicator"></div>
-                  <div class="field-group" style="display:flex; gap:1rem; margin-bottom:1rem">
-                  <div class="field" style="flex:1">
-                    <label>Hardware Status</label>
-                    <div id="bt-status" style="font-weight:600; color:var(--amber)">Ready to Scan</div>
-                  </div>
-                  <div style="display:flex; gap:0.5rem; align-items:flex-end">
-                    <button class="btn btn-primary" onclick="toggleBluetooth()">✨ Start Scan</button>
-                    <button class="btn btn-secondary" title="Verify if an ID is registered in database" onclick="testDetection()">🔍 Check DB</button>
-                  </div>
-                </div>
-                
-                <!-- Visibility Guide -->
-                <div style="background:rgba(0,0,0,0.2); padding:0.8rem; border-radius:8px; margin-bottom:1rem; border-left:4px solid var(--amber)">
-                  <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.3rem">💡 Student phone not appearing?</div>
-                  <div style="font-size:0.75rem; color:var(--text2); line-height:1.4">
-                    The student <strong>MUST</strong> open their <strong>Bluetooth Settings</strong> screen for the phone to become visible. Once they close that screen, they disappear!
-                  </div>
-                </div>
-                  <button class="btn btn-secondary btn-sm" id="bt-toggle-btn" onclick="toggleBluetooth()" style="margin-left:auto">Stop Scan</button>
-                </div>
-                <div class="bt-feed-container" style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem">
-                  <div class="field">
-                    <div class="card-title" style="font-size:0.9rem">✅ Marked Present</div>
-                    <div class="bt-feed" id="bt-feed" style="min-height:200px">
-                      <div style="color:var(--text2)">Waiting for student signals...</div>
-                    </div>
-                  </div>
-                  <div class="field">
-                    <div class="card-title" style="font-size:0.9rem; color:var(--text2)">📡 All Nearby Signals (Raw IDs)</div>
-                    <div id="bt-raw-feed" style="height:200px; overflow-y:auto; font-size:0.75rem; font-family:var(--mono); color:var(--text2); border:1px solid var(--border); padding:0.75rem; background:rgba(0,0,0,0.1); border-radius:8px">
-                      <div style="opacity:0.5">Scanning for any Bluetooth signals...</div>
-                    </div>
-                  </div>
+            <!-- GPS Auto Mode -->
+            <div id="gps-mode-panel" style="display:none">
+              <div class="card" style="border-color:var(--green)">
+                <div class="card-title">📍 GPS Auto Check-In — Live Feed</div>
+                <p style="font-size:0.85rem; color:var(--text2); margin-bottom:1rem">
+                  Students who open the app on their phone and allow location access will be automatically marked <strong style="color:var(--green)">PRESENT</strong> if they are within 50 metres of the classroom.
+                </p>
+                <div class="card-title" style="font-size:0.9rem; margin-bottom:0.5rem">✅ Students Marked Present</div>
+                <div class="bt-feed" id="bt-feed" style="min-height:200px">
+                  <div style="color:var(--text2)">Waiting for students to check in via app...</div>
                 </div>
               </div>
             </div>
@@ -767,7 +738,6 @@ let role = null;
 let currentUser = null;
 let activeSessionId = null;
 let stompClient = null;
-let btScanning = false;
 let manualPresentIds = new Set();
 
 // ─── ROUTING ─────────────────────────────────────────────────────────
@@ -834,7 +804,6 @@ async function studentLogin() {
 function logout() {
   token = null; role = null; currentUser = null; activeSessionId = null;
   if (stompClient) { stompClient.disconnect(); stompClient = null; }
-  btScanning = false;
   showPage('landing');
 }
 
@@ -864,7 +833,7 @@ function appendBtFeed(event) {
   const entry = document.createElement('div');
   entry.className = 'feed-entry';
   const ts = event.detectedAt ? event.detectedAt.split(' ')[1] : new Date().toLocaleTimeString();
-  entry.innerHTML = `<span class="ts">[${ts}]</span> ✅ <strong>${event.rollNumber}</strong> — ${event.fullName} <span style="color:var(--text2)">(${event.bluetoothMac})</span>`;
+  entry.innerHTML = `<span class="ts">[${ts}]</span> ✅ <strong>${event.rollNumber}</strong> — ${event.fullName} <span style="color:var(--text2)">checked in via GPS</span>`;
   if (feed.querySelector('div[style]')) feed.innerHTML = '';
   feed.appendChild(entry);
   feed.scrollTop = feed.scrollHeight;
@@ -952,13 +921,12 @@ async function startSession() {
     document.getElementById('manual-preview').style.display = 'none';
     document.getElementById('step-active').style.display = 'block';
 
-    if (mode === 'BLUETOOTH') {
-      document.getElementById('bt-mode-panel').style.display = 'block';
+    if (mode === 'AUTO') {
+      document.getElementById('gps-mode-panel').style.display = 'block';
       document.getElementById('manual-mode-panel').style.display = 'none';
-      btScanning = true;
       subscribeToSession(activeSessionId);
     } else {
-      document.getElementById('bt-mode-panel').style.display = 'none';
+      document.getElementById('gps-mode-panel').style.display = 'none';
       document.getElementById('manual-mode-panel').style.display = 'block';
       await loadManualStudents(section);
     }
@@ -1100,11 +1068,13 @@ function showSummary(s) {
 }
 
 function resetToCreate() {
-  activeSessionId = null; btScanning = false; manualPresentIds = new Set(); manualLateIds = new Set();
+  activeSessionId = null; manualPresentIds = new Set(); manualLateIds = new Set();
   document.getElementById('step-create').style.display = 'block';
   document.getElementById('step-active').style.display = 'none';
   document.getElementById('step-summary').style.display = 'none';
-  document.getElementById('bt-feed').innerHTML = '<div style="color:var(--text2)">Waiting for students to connect...</div>';
+  document.getElementById('gps-mode-panel').style.display = 'none';
+  document.getElementById('manual-mode-panel').style.display = 'none';
+  document.getElementById('bt-feed').innerHTML = '<div style="color:var(--text2)">Waiting for students to check in via app...</div>';
   document.getElementById('attend-progress').style.width = '0%';
   loadTeacherDashboard();
 }
@@ -1140,144 +1110,7 @@ function cancelSession() {
   toast('Session cancelled', 'error');
 }
 
-let bluetoothScan = null;
 
-async function toggleBluetooth() {
-  const status = document.getElementById('bt-status');
-  try {
-    // Hardware Diagnostic
-    if (!navigator.bluetooth) {
-      throw new Error('Web Bluetooth is not supported. Please use Chrome/Edge and enable flags.');
-    }
-    
-    const available = await navigator.bluetooth.getAvailability();
-    if (!available) {
-      logBt('<strong>⚠️ Hardware Error:</strong> Bluetooth is turned OFF on your laptop.');
-      throw new Error('Please turn ON Bluetooth in your Windows settings.');
-    }
-    
-    status.textContent = 'Opening Picker...';
-    status.style.color = 'var(--blue)';
-    logBt('<strong>[BT]</strong> Searching... Please look at the browser popup.');
-    logBt('<em>Tip: Students must have their Bluetooth Settings screen open to be seen.</em>');
-    
-    const device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [
-        'battery_service', 
-        'device_information',
-        'generic_access'
-      ]
-    });
-
-    logBt(`Device Picked: <strong>${device.name || 'Unknown'}</strong>`);
-    logBt(`ID Detected: <span style="color:var(--amber)">${device.id}</span>`);
-    
-    const deviceId = device.id;
-    status.textContent = 'Matching...';
-
-    const res = await apiFetch(`/api/teacher/session/${activeSessionId}/detect`, 'POST', { deviceId });
-    
-    if (res.success) {
-      status.textContent = 'Match Found!';
-      status.style.color = 'var(--green)';
-      toast(`Success: ${res.rollNumber} marked present!`, 'success');
-      logBt(`✅ Match Found: <strong>${res.rollNumber}</strong> (${res.fullName})`);
-    } else {
-      status.textContent = 'No Match';
-      status.style.color = 'var(--red)';
-      toast(res.message, 'warning');
-      logBt(`❌ Backend Result: ${res.message}`);
-    }
-    
-  } catch (e) {
-    status.textContent = 'Inactive';
-    status.style.color = 'var(--amber)';
-    if (e.name === 'NotFoundError') {
-      logBt('Scan cancelled by user.');
-    } else {
-      logBt(`⚠️ Error: ${e.message}`);
-      toast(e.message, 'error');
-    }
-  }
-}
-
-// --- ZERO INTERACTION AUTOMATION ---
-async function startTeacherBeacon() {
-  const status = document.getElementById('bt-status');
-  try {
-    logBt('<strong>[Auto]</strong> Teacher Beacon Active. Students will detect you automatically.');
-    status.textContent = 'Beacon Active';
-    status.style.color = 'var(--green)';
-    document.getElementById('bt-indicator').classList.add('scanning');
-    
-    // Heartbeat for proximity
-    setInterval(async () => {
-      if (activeSessionId) {
-        await apiFetch(`/api/teacher/session/${activeSessionId}/heartbeat`, 'POST', {});
-      }
-    }, 5000);
-  } catch (e) { logBt(`⚠️ Beacon Error: ${e.message}`); }
-}
-
-async function startBluetoothRadar() {
-  if (!('bluetooth' in navigator) || !('requestLEScan' in navigator.bluetooth)) {
-    alert("Bluetooth Radar requires Chrome Experimental Features. Please enable: chrome://flags/#enable-experimental-web-platform-features");
-    return;
-  }
-
-  const btn = document.getElementById('radar-btn');
-  const status = document.getElementById('radar-status');
-
-  try {
-    logBt("📡 Requesting Bluetooth Scan permission...");
-    const scan = await navigator.bluetooth.requestLEScan({
-      acceptAllAdvertisements: true,
-      keepRepeatedDevices: false
-    });
-
-    btn.disabled = true;
-    btn.textContent = "🛰️ Radar Active";
-    status.textContent = "Scanning for nearby devices...";
-    status.style.color = "var(--green)";
-
-    navigator.bluetooth.addEventListener('advertisementreceived', event => {
-      const deviceId = event.device.id;
-      const deviceName = event.device.name || "Unknown Device";
-      
-      logBt(`📡 Detected Signal: <span style="font-family:var(--mono)">${deviceName}</span> (${deviceId})`);
-      
-      // Send both Name and ID for matching
-      const payload = [deviceId, deviceName];
-      apiFetch(`/api/teacher/session/${activeSessionId}/detect-bulk`, 'POST', payload)
-        .then(res => {
-          if (res.success) logBt(`✅ Auto-Marked: ${res.rollNumber} (${res.fullName})`);
-        })
-        .catch(e => {});
-    });
-
-    logBt("✅ Radar is now monitoring the room.");
-  } catch (e) {
-    logBt(`❌ Radar Error: ${e.message}`);
-    alert("Could not start Radar: " + e.message);
-  }
-}
-
-async function simulateTestMatch() {
-  const vid = localStorage.getItem('bt_virtual_id');
-  if (!vid) {
-    toast("No active student session found. Please log in as a student in an Incognito window first!", "warning");
-    return;
-  }
-  logBt(`<strong>[Sim]</strong> Simulating detection of: <em>${vid}</em>`);
-  try {
-    const res = await apiFetch(`/api/teacher/session/${activeSessionId}/detect-bulk`, 'POST', [vid]);
-    if (res.success) {
-      toast("Simulation Success!", "success");
-      logBt(`✅ Simulation: Match found and processed.`);
-    }
-  } catch(e) { logBt(`❌ Sim Error: ${e.message}`); }
-}
 
 async function startStudentAutoCheckin() {
   async function getCoords() {
@@ -1315,50 +1148,6 @@ async function startStudentAutoCheckin() {
   setInterval(doPing, 10000);
 }
 
-function logBt(msg) {
-  const rawFeed = document.getElementById('bt-raw-feed');
-  if (rawFeed.innerText.includes('Scanning')) rawFeed.innerHTML = '';
-  const time = new Date().toLocaleTimeString();
-  const entry = document.createElement('div');
-  entry.style.padding = '0.2rem 0';
-  entry.innerHTML = `<span style="color:var(--blue)">[${time}]</span> ${msg}`;
-  rawFeed.prepend(entry);
-}
-
-async function reportDetectedDevice(deviceId) {
-  if (!activeSessionId) return;
-  
-  // Update raw feed
-  const rawFeed = document.getElementById('bt-raw-feed');
-  if (rawFeed.innerText.includes('No signals detected')) rawFeed.innerHTML = '';
-  const time = new Date().toLocaleTimeString();
-  const entry = document.createElement('div');
-  entry.style.padding = '0.2rem 0';
-  entry.innerHTML = `<span style="color:var(--blue)">[${time}]</span> Found: ${deviceId}`;
-  rawFeed.prepend(entry);
-  if (rawFeed.children.length > 20) rawFeed.lastChild.remove();
-
-  try {
-    await apiFetch(`/api/teacher/session/${activeSessionId}/detect`, 'POST', { deviceId });
-  } catch (e) {
-    console.debug('Detection report skipped:', e.message);
-  }
-}
-
-function updateBtUI() {
-  const ind = document.getElementById('bt-indicator');
-  const btn = document.getElementById('bt-toggle-btn');
-  const txt = document.getElementById('bt-status-text');
-  if (btScanning) {
-    ind.className = 'bt-indicator scanning';
-    btn.textContent = 'Stop Scan';
-    txt.textContent = 'Scanning for student devices...';
-  } else {
-    ind.className = 'bt-indicator';
-    btn.textContent = 'Resume Scan';
-    txt.textContent = 'Scan paused';
-  }
-}
 
 // ─── STUDENT FUNCTIONS ────────────────────────────────────────────────
 async function pingAttendance() {

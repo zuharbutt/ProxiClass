@@ -58,7 +58,7 @@ public class Session {
     }
 
     public enum AttendanceMode {
-        BLUETOOTH, MANUAL
+        AUTO, MANUAL, BLUETOOTH  // BLUETOOTH kept for backward compat with existing DB rows
     }
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

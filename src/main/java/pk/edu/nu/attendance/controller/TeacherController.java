@@ -112,18 +112,5 @@ public class TeacherController {
         }
     }
 
-    // Automated bulk detection from external bridge script
-    @PostMapping("/session/{sessionId}/detect-bulk")
-    public ResponseEntity<?> detectBulk(@PathVariable Long sessionId, @RequestBody List<String> deviceIds) {
-        try {
-            for (String id : deviceIds) {
-                try {
-                    attendanceService.markDevicePresent(sessionId, id);
-                } catch (Exception e) { /* skip individual errors */ }
-            }
-            return ResponseEntity.ok(Map.of("success", true, "processed", deviceIds.size()));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
 }
+
