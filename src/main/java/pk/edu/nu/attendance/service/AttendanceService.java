@@ -34,6 +34,13 @@ public class AttendanceService {
 
     // Create a new attendance session
     public Dtos.SessionDto createSession(User teacher, String courseName, String section, String mode, Double teacherLat, Double teacherLng) {
+        // Guard: teacher can only run one session at a time
+        boolean alreadyActive = sessionRepository.findByTeacher(teacher).stream()
+                .anyMatch(s -> s.getStatus() == Session.SessionStatus.ACTIVE);
+        if (alreadyActive) {
+            throw new RuntimeException("You already have an active session. Please end or cancel it before starting a new one.");
+        }
+
         Session session = new Session();
         session.setCourseName(courseName);
         session.setSection(section);
@@ -107,7 +114,7 @@ public class AttendanceService {
             return r;
         });
         record.setStatus(AttendanceRecord.AttendanceStatus.PRESENT);
-        record.setMarkMethod(AttendanceRecord.MarkMethod.BLUETOOTH);
+        record.setMarkMethod(AttendanceRecord.MarkMethod.AUTO);
         record.setMarkedAt(LocalDateTime.now());
         record.setDetectedMac("APP-LOGIN");
         attendanceRecordRepository.save(record);

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -396,12 +396,12 @@
     <div class="main-body">
       <div class="sidebar">
         <div class="nav-section">Navigation</div>
-        <div class="nav-item active" onclick="switchPanel('t-dashboard', this)">📊 Dashboard</div>
-        <div class="nav-item" onclick="switchPanel('t-mark-attendance', this)">✅ Mark Attendance</div>
+        <div class="nav-item active" onclick="switchPanel('t-dashboard', this)">Dashboard</div>
+        <div class="nav-item" onclick="switchPanel('t-mark-attendance', this)">Mark Attendance</div>
         <div class="nav-divider"></div>
         <div class="nav-section">History</div>
-        <div class="nav-item" onclick="switchPanel('t-sessions', this)">📋 My Sessions</div>
-        <div class="nav-item" onclick="switchPanel('t-course-summary', this)">📈 Course Summary</div>
+        <div class="nav-item" onclick="switchPanel('t-sessions', this)">My Sessions</div>
+        <div class="nav-item" onclick="switchPanel('t-course-summary', this)">Course Summary</div>
       </div>
       <div class="content">
 
@@ -574,17 +574,6 @@
               </table>
             </div>
           </div>
-          <div class="card" style="border-color:var(--blue)">
-            <div class="card-title">🧪 Testing & Radar</div>
-            <p style="font-size:0.8rem; color:var(--text2); margin-bottom:1rem">
-              Use the Radar for automatic Bluetooth detection (requires Chrome Flag).
-            </p>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem">
-              <button class="btn btn-blue" onclick="simulateTestMatch()">🚀 Simulate</button>
-              <button id="radar-btn" class="btn btn-green" onclick="startBluetoothRadar()">📡 Start Radar</button>
-            </div>
-            <div id="radar-status" style="font-size:0.7rem; color:var(--text2); margin-top:0.5rem; text-align:center">Radar is OFF</div>
-          </div>
         </div>
 
       </div>
@@ -606,11 +595,11 @@
     <div class="main-body">
       <div class="sidebar">
         <div class="nav-section">Navigation</div>
-        <div class="nav-item active" onclick="switchPanel('s-home', this)">🏠 Home</div>
-        <div class="nav-item" onclick="switchPanel('s-attendance', this); loadStudentHistory()">📊 My Attendance</div>
+        <div class="nav-item active" onclick="switchPanel('s-home', this)">Home</div>
+        <div class="nav-item" onclick="switchPanel('s-attendance', this); loadStudentHistory()">My Attendance</div>
         <div class="nav-divider"></div>
         <div class="nav-section">Settings</div>
-            <div class="nav-item" onclick="switchPanel('s-device', this)">📱 My Device</div>
+            <div class="nav-item" onclick="switchPanel('s-device', this)">My Device</div>
       </div>
       <div class="content">
 
@@ -684,7 +673,7 @@
         <!-- Device Registration -->
         <!-- My Device Panel -->
         <div class="panel" id="s-device">
-          <div class="panel-title">📱 Register My Device</div>
+          <div class="panel-title">Register My Device</div>
           <p style="color:var(--text2); margin-bottom:1.5rem; font-size:0.9rem">
             Register your phone's real Bluetooth MAC address so the teacher's scanner can detect you automatically.
           </p>
@@ -1340,3 +1329,4 @@ function toast(msg, type='success') {
 </script>
 </body>
 </html>
+
