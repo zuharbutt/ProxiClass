@@ -1,8 +1,6 @@
 -- Teachers
 INSERT INTO users (username, password, role, full_name, department) VALUES 
-('dr.ahmed', '$2a$10$yi9.pwFJSruh1zC64fFItOOgS1zm9nc/2N4u0HuksIa1736DfYzbm', 'TEACHER', 'Dr. Ahmed Khan', 'CS'),
-('ms.fatima', '$2a$10$yi9.pwFJSruh1zC64fFItOOgS1zm9nc/2N4u0HuksIa1736DfYzbm', 'TEACHER', 'Ms. Fatima Malik', 'CS'),
-('prof.ali', '$2a$10$yi9.pwFJSruh1zC64fFItOOgS1zm9nc/2N4u0HuksIa1736DfYzbm', 'TEACHER', 'Prof. Ali Hassan', 'EE');
+('zeeshanrana', '$2a$10$yi9.pwFJSruh1zC64fFItOOgS1zm9nc/2N4u0HuksIa1736DfYzbm', 'TEACHER', 'Zeeshan Rana', 'CS');
 
 -- Students for Section BSE-4A
 INSERT INTO users (username, password, role, full_name, roll_number, section, department) VALUES 

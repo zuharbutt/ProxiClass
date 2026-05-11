@@ -350,7 +350,7 @@
     <p class="portal-url">flex.nu.edu.pk · Powered by NU Attendance System</p>
     <div class="field">
       <label>Username</label>
-      <input type="text" id="t-username" placeholder="dr.ahmed" />
+      <input type="text" id="t-username" placeholder="zeeshanrana" />
     </div>
     <div class="field">
       <label>Password</label>
@@ -358,7 +358,7 @@
     </div>
     <div class="error-msg" id="t-error"></div>
     <button class="btn btn-primary" onclick="teacherLogin()" style="margin-top:1rem" id="t-login-btn">Sign In</button>
-    <p style="font-size:0.75rem;color:var(--text2);margin-top:1rem;font-family:var(--mono)">Demo: dr.ahmed / password123</p>
+    <p style="font-size:0.75rem;color:var(--text2);margin-top:1rem;font-family:var(--mono)">Demo: zeeshanrana / password123</p>
   </div>
 </div>
 
@@ -1471,6 +1471,22 @@ function toast(msg, type='success') {
   el.className = `show ${type}`;
   setTimeout(() => { el.className = ''; }, 3000);
 }
+
+// ─── TAB CLOSE / UNLOAD ──────────────────────────────────────────────
+// Ensure active sessions end if the teacher closes the tab or browser
+window.addEventListener('pagehide', (event) => {
+  if (role === 'TEACHER' && token) {
+    // Using fetch with keepalive: true to ensure the request finishes after the page is gone
+    fetch(API + '/api/teacher/sessions/close-all', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      keepalive: true
+    });
+  }
+});
 </script>
 </body>
 </html>

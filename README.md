@@ -22,11 +22,9 @@ Open: **http://localhost:8080**
 ## Demo Credentials
 
 ### Teacher Logins (flex.nu.edu.pk portal)
-| Username   | Password     | Name              |
-|------------|-------------|-------------------|
-| dr.ahmed   | password123  | Dr. Ahmed Khan    |
-| ms.fatima  | password123  | Ms. Fatima Malik  |
-| prof.ali   | password123  | Prof. Ali Hassan  |
+| Username     | Password     | Name              |
+|--------------|-------------|-------------------|
+| zeeshanrana  | password123  | Zeeshan Rana      |
 
 ### Student Logins (flexstudent.nu.edu.pk portal)
 | Username   | Password | Roll No.  | Section |

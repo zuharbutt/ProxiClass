@@ -33,15 +33,10 @@ public class DataInitializer implements CommandLineRunner {
         // 1. Clear existing data to start from zero as requested
         attendanceRecordRepository.deleteAll();
         sessionRepository.deleteAll();
-        
-        // Delete only students to preserve teachers
-        List<User> existingStudents = userRepository.findByRole(User.Role.STUDENT);
-        userRepository.deleteAll(existingStudents);
+        userRepository.deleteAll(); // Delete all users to re-initialize cleanly
 
-        // 2. Create Teachers
-        createTeacher("dr.ahmed", "password123", "Dr. Ahmed Khan", "CS");
-        createTeacher("ms.fatima", "password123", "Ms. Fatima Malik", "CS");
-        createTeacher("prof.ali", "password123", "Prof. Ali Hassan", "EE");
+        // 2. Create Single Teacher
+        createTeacher("zeeshanrana", "password123", "Zeeshan Rana", "CS");
 
         // 3. Import Students from students_data folder
         File dataDir = new File("students_data");
@@ -58,7 +53,7 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         System.out.println("=== NU Attendance System Started ===");
-        System.out.println("Teachers: dr.ahmed / ms.fatima / prof.ali (password: password123)");
+        System.out.println("Teachers: zeeshanrana (password: password123)");
         System.out.println("Imported students from students_data/ (password: pass123)");
         
         // Manual override for testing
