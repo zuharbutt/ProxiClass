@@ -53,6 +53,9 @@ public class Session {
     @Column(name = "teacher_lng")
     private Double teacherLng;
 
+    @Column(name = "teacher_alt")
+    private Double teacherAlt;
+
     public enum SessionStatus {
         ACTIVE, COMPLETED, CANCELLED
     }
@@ -80,4 +83,6 @@ public class Session {
     public void setTeacherLat(Double teacherLat) { this.teacherLat = teacherLat; }
     public Double getTeacherLng() { return teacherLng; }
     public void setTeacherLng(Double teacherLng) { this.teacherLng = teacherLng; }
+    public Double getTeacherAlt() { return teacherAlt; }
+    public void setTeacherAlt(Double teacherAlt) { this.teacherAlt = teacherAlt; }
 }

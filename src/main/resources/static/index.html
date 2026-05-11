@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6,6 +6,7 @@
 <title>NU Attendance System</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 <script>
   if (localStorage.getItem('theme') === 'light') {
     document.documentElement.setAttribute('data-theme', 'light');
@@ -527,7 +528,13 @@
                   <tbody id="sum-tbody"></tbody>
                 </table>
               </div>
-              <button class="btn btn-secondary" onclick="resetToCreate()" style="margin-top:1.5rem">Start New Session</button>
+              <div style="display:flex;gap:1rem;margin-top:1.5rem;flex-wrap:wrap;align-items:center">
+                <button class="btn btn-secondary" onclick="resetToCreate()">Start New Session</button>
+                <button class="btn" id="download-excel-btn" onclick="downloadAttendanceExcel()"
+                  style="background:linear-gradient(135deg,#1d6f42,#21a366);color:#fff;gap:0.5rem;box-shadow:0 2px 10px rgba(29,111,66,0.4);border:none">
+                  📊 Download Excel Sheet
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -635,8 +642,8 @@
           </div>
 
           <div class="card">
-            <div class="card-title">📋 Active Sessions (My Section)</div>
-            <div id="s-active-sessions" style="color:var(--text2);font-size:0.85rem">Checking for active sessions...</div>
+            <div class="card-title">📋 Active Session (My Section)</div>
+            <div id="s-active-sessions" style="color:var(--text2);font-size:0.85rem">Checking for active session...</div>
           </div>
         </div>
 
@@ -790,7 +797,14 @@ async function studentLogin() {
   btn.disabled = false; btn.textContent = 'Sign In';
 }
 
-function logout() {
+async function logout() {
+  if (role === 'TEACHER' && token) {
+    try {
+      await apiFetch('/api/teacher/sessions/close-all', 'POST');
+    } catch (e) {
+      console.error('Failed to close active sessions on logout', e);
+    }
+  }
   token = null; role = null; currentUser = null; activeSessionId = null;
   if (stompClient) { stompClient.disconnect(); stompClient = null; }
   showPage('landing');
@@ -881,13 +895,14 @@ async function startSession() {
   if (!course) { toast('Enter a course name', 'error'); return; }
 
   // Get teacher's GPS location before starting
-  let teacherLat = null, teacherLng = null;
+  let teacherLat = null, teacherLng = null, teacherAlt = null;
   try {
     const pos = await new Promise((resolve, reject) =>
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 })
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000, enableHighAccuracy: true })
     );
     teacherLat = pos.coords.latitude;
     teacherLng = pos.coords.longitude;
+    teacherAlt = pos.coords.altitude;
     toast(`📍 Location captured (±${Math.round(pos.coords.accuracy)}m accuracy)`, 'success');
   } catch (e) {
     toast('⚠️ Location denied — proximity check disabled for this session', 'error');
@@ -896,7 +911,7 @@ async function startSession() {
   try {
     const session = await apiFetch('/api/teacher/session/start', 'POST', {
       courseName: course, section, attendanceMode: mode,
-      teacherLat, teacherLng
+      teacherLat, teacherLng, teacherAlt
     });
     activeSessionId = session.id;
     document.getElementById('active-course').textContent = course;
@@ -905,6 +920,10 @@ async function startSession() {
     document.getElementById('active-mode-label').textContent = mode;
     document.getElementById('active-total').textContent = session.totalStudents;
     updateActiveCount();
+    
+    // Show active step
+    document.getElementById('step-create').style.display = 'none';
+    document.getElementById('step-active').style.display = 'block';
 
     document.getElementById('step-create').style.display = 'none';
     document.getElementById('manual-preview').style.display = 'none';
@@ -1041,7 +1060,10 @@ async function submitAttendance() {
   }
 }
 
+let lastSummaryData = null;
+
 function showSummary(s) {
+  lastSummaryData = s;
   document.getElementById('step-active').style.display = 'none';
   document.getElementById('step-summary').style.display = 'block';
   document.getElementById('sum-total').textContent = s.totalStudents;
@@ -1054,6 +1076,117 @@ function showSummary(s) {
       <td>${r.fullName}</td>
       <td><span class="badge badge-${r.status.toLowerCase()}">${r.status}</span></td>
     </tr>`).join('');
+}
+
+async function downloadAttendanceExcel() {
+  if (!lastSummaryData || !lastSummaryData.records) {
+    toast('No attendance data to export', 'error');
+    return;
+  }
+  
+  const courseName = lastSummaryData.courseName || document.getElementById('active-course').textContent || 'Attendance';
+  const section = lastSummaryData.section || document.getElementById('active-section').textContent || '';
+  
+  const btn = document.getElementById('download-excel-btn');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '⏳ Generating Full History...';
+  btn.disabled = true;
+
+  try {
+    // 1. Fetch all sessions
+    const allSessions = await apiFetch('/api/teacher/sessions');
+    
+    // 2. Filter for this course & section, sort by oldest first
+    const relevantSessions = allSessions
+      .filter(s => s.courseName === courseName && s.section === section && s.status === 'COMPLETED')
+      .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
+    // 3. Fetch summary for each session
+    const sessionSummaries = [];
+    for (const session of relevantSessions) {
+      const summary = await apiFetch(`/api/teacher/session/${session.id}/summary`);
+      // Format date nicely: dd/MM/yyyy HH:mm
+      const d = new Date(session.startTime.replace(' ', 'T')); // Handle "yyyy-MM-dd HH:mm:ss"
+      const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      sessionSummaries.push({
+        id: session.id,
+        date: `${dateStr} ${timeStr}`,
+        records: summary.records
+      });
+    }
+
+    // Ensure the current session is included if it somehow wasn't in the completed list yet
+    if (!sessionSummaries.find(s => s.id === lastSummaryData.sessionId)) {
+      const d = new Date();
+      const todayStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      sessionSummaries.push({
+        id: lastSummaryData.sessionId,
+        date: `${todayStr} ${timeStr}`,
+        records: lastSummaryData.records
+      });
+    }
+
+    // 4. Build the matrix
+    const studentsMap = new Map();
+    // Initialize with all students from the latest summary
+    lastSummaryData.records.forEach(r => {
+      studentsMap.set(r.rollNumber, { name: r.fullName, marks: {} });
+    });
+
+    // Populate marks and build headers
+    const dateHeaders = [];
+    const abbrCourse = courseName.substring(0, 3).toUpperCase();
+    
+    sessionSummaries.forEach(ss => {
+      const headerLabel = `${ss.date} (${abbrCourse} ${section})`;
+      if (!dateHeaders.includes(headerLabel)) {
+          dateHeaders.push(headerLabel);
+      }
+      ss.records.forEach(r => {
+        if (!studentsMap.has(r.rollNumber)) {
+          studentsMap.set(r.rollNumber, { name: r.fullName, marks: {} });
+        }
+        let m = 'A';
+        if (r.status === 'PRESENT') m = 'P';
+        if (r.status === 'LATE') m = 'L';
+        studentsMap.get(r.rollNumber).marks[headerLabel] = m;
+      });
+    });
+
+    // 5. Generate Excel arrays
+    const wsData = [
+      ['Name', 'Roll No.', ...dateHeaders]
+    ];
+
+    Array.from(studentsMap.entries()).forEach(([roll, data]) => {
+      const row = [data.name, roll];
+      dateHeaders.forEach(header => {
+        row.push(data.marks[header] || '-'); // '-' if student wasn't in that session
+      });
+      wsData.push(row);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Style column widths
+    const cols = [{ wch: 25 }, { wch: 12 }];
+    dateHeaders.forEach(() => cols.push({ wch: 20 }));
+    ws['!cols'] = cols;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance History');
+
+    const fileName = `${courseName}_${section}_Full_Attendance.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    toast('Excel sheet downloaded!', 'success');
+  } catch (e) {
+    toast('Error generating Excel: ' + e.message, 'error');
+  } finally {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
 }
 
 function resetToCreate() {
@@ -1105,9 +1238,14 @@ async function startStudentAutoCheckin() {
   async function getCoords() {
     return new Promise((resolve) =>
       navigator.geolocation.getCurrentPosition(
-        p => resolve({ studentLat: p.coords.latitude, studentLng: p.coords.longitude }),
-        () => resolve({ studentLat: null, studentLng: null }),
-        { timeout: 5000, maximumAge: 30000 }
+        p => resolve({ 
+            studentLat: p.coords.latitude, 
+            studentLng: p.coords.longitude,
+            studentAlt: p.coords.altitude,
+            studentAccuracy: p.coords.accuracy
+        }),
+        () => resolve({ studentLat: null, studentLng: null, studentAlt: null, studentAccuracy: null }),
+        { timeout: 5000, maximumAge: 0, enableHighAccuracy: true }
       )
     );
   }
@@ -1149,14 +1287,21 @@ async function pingAttendance() {
   result.textContent = 'Sending signal...';
 
   try {
-    const res = await apiFetch('/api/student/attendance/ping', 'POST');
+    const coords = await getCoords();
+    const res = await apiFetch('/api/student/attendance/ping', 'POST', coords);
     if (res.success) {
       result.style.color = 'var(--green)';
       result.textContent = `✅ ${res.message}${res.courseName ? ` — ${res.courseName}` : ''}`;
+      if (res.distance !== undefined) {
+        result.textContent += ` (Distance: ${res.distance}m)`;
+      }
       toast('Attendance marked!', 'success');
     } else {
-      result.style.color = 'var(--amber)';
-      result.textContent = `⚠️ ${res.message}`;
+      result.style.color = 'var(--red)';
+      result.textContent = `❌ ${res.message}`;
+      if (res.distance !== undefined) {
+        result.textContent += ` (Distance: ${res.distance}m)`;
+      }
     }
   } catch(e) {
     result.style.color = 'var(--red)';
@@ -1223,7 +1368,7 @@ async function loadStudentActiveSessions() {
     const attCard = document.getElementById('student-attendance-card');
 
     if (sessions.length === 0) {
-      el.innerHTML = '<span style="color:var(--text2);font-size:0.85rem">No active sessions for your section right now</span>';
+      el.innerHTML = '<span style="color:var(--text2);font-size:0.85rem">No active session for your section right now</span>';
       attCard.style.display = 'none';
     } else {
       attCard.style.display = 'block';
@@ -1238,7 +1383,7 @@ async function loadStudentActiveSessions() {
   } catch(e) { console.error(e); }
 }
 
-// Poll for active sessions every 10 seconds when logged in as student
+// Poll for active session every 10 seconds when logged in as student
 setInterval(() => {
   if (role === 'STUDENT' && token) {
     loadStudentActiveSessions();

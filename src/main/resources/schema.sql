@@ -25,6 +25,7 @@ CREATE TABLE sessions (
     attendance_mode VARCHAR(50),
     teacher_lat FLOAT,
     teacher_lng FLOAT,
+    teacher_alt FLOAT,
     FOREIGN KEY (teacher_id) REFERENCES users(id)
 );
 

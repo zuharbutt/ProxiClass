@@ -31,14 +31,33 @@ public class AttendanceService {
     private SimpMessagingTemplate messagingTemplate;
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    
+    // Classroom Target Coordinates (Constants)
+    private static final double TARGET_LAT = 33.6844; 
+    private static final double TARGET_LNG = 73.0479;
+    private static final double TARGET_ALT = 540.0;
+    
+    // Validation Thresholds
+    private static final double HORIZONTAL_THRESHOLD = 30.0; // Increased from 10m for indoor reliability
+    private static final double EXPANDED_HORIZONTAL_THRESHOLD = 60.0; // Increased from 25m for high drift
+    private static final double VERTICAL_THRESHOLD = 5.0;   // Increased from 3m
+    private static final double ACCURACY_DRIFT_THRESHOLD = 15.0; // meters (when to use expanded threshold)
+    private static final double ACCURACY_SANITY_THRESHOLD = 100.0; // meters (when to reject entirely)
 
     // Create a new attendance session
-    public Dtos.SessionDto createSession(User teacher, String courseName, String section, String mode, Double teacherLat, Double teacherLng) {
+    public Dtos.SessionDto createSession(User teacher, String courseName, String section, String mode, Double teacherLat, Double teacherLng, Double teacherAlt) {
         // Guard: teacher can only run one session at a time
         boolean alreadyActive = sessionRepository.findByTeacher(teacher).stream()
                 .anyMatch(s -> s.getStatus() == Session.SessionStatus.ACTIVE);
         if (alreadyActive) {
             throw new RuntimeException("You already have an active session. Please end or cancel it before starting a new one.");
+        }
+
+        // Guard: a section can only have one active session at a time
+        boolean sectionActive = sessionRepository.findByStatus(Session.SessionStatus.ACTIVE).stream()
+                .anyMatch(s -> s.getSection().equals(section));
+        if (sectionActive) {
+            throw new RuntimeException("Section " + section + " already has an active session. Please wait for it to end before starting a new one.");
         }
 
         Session session = new Session();
@@ -50,6 +69,7 @@ public class AttendanceService {
         session.setAttendanceMode(Session.AttendanceMode.valueOf(mode));
         session.setTeacherLat(teacherLat);
         session.setTeacherLng(teacherLng);
+        session.setTeacherAlt(teacherAlt);
         Session saved = sessionRepository.save(session);
 
         // Pre-populate all students in section as ABSENT
@@ -68,7 +88,12 @@ public class AttendanceService {
     }
 
     // Student is in class — mark present based on login identity + GPS proximity check
-    public Map<String, Object> studentBluetoothPing(User student, Double studentLat, Double studentLng) {
+    public Map<String, Object> studentBluetoothPing(User student, Double studentLat, Double studentLng, Double studentAlt, Double studentAccuracy) {
+        // Log accuracy for debugging drift issues
+        if (studentAccuracy != null) {
+            System.out.println(String.format("[GPS LOG] Student: %s, Accuracy: %.1fm", student.getRollNumber(), studentAccuracy));
+        }
+
         // 1. Find active session for this student's section
         List<Session> activeSessions = sessionRepository.findByStatus(Session.SessionStatus.ACTIVE);
         Session session = activeSessions.stream()
@@ -86,19 +111,39 @@ public class AttendanceService {
                 "message", "📍 Location access required. Please allow location in your browser to mark attendance.");
         }
 
-        // 3. STEP 2: If teacher stored their location, enforce the 50 m proximity rule
-        if (session.getTeacherLat() != null && session.getTeacherLng() != null) {
-            double distance = haversineDistance(
-                session.getTeacherLat(), session.getTeacherLng(),
-                studentLat, studentLng
-            );
-            if (distance > 50.0) {
-                return Map.of("success", false,
-                    "message", String.format("❌ Too far — you are %.0f m away. Must be within 50 m of classroom.", distance),
-                    "distance", Math.round(distance));
-            }
+        // 3. STEP 2: Sanity Check for Low Accuracy
+        if (studentAccuracy != null && studentAccuracy > ACCURACY_SANITY_THRESHOLD) {
+            return Map.of("success", false,
+                "message", "❌ Low GPS accuracy, please move near a window or turn on Wi-Fi.");
         }
-        // If teacher did not share location → proximity check skipped (graceful degradation)
+
+        // 4. STEP 3: Enforce the proximity rule using fixed classroom coordinates
+        // Use teacher's session location as the reference point (fallback to constants if null or 0.0)
+        double targetLat = (session.getTeacherLat() != null && session.getTeacherLat() != 0.0) ? session.getTeacherLat() : TARGET_LAT;
+        double targetLng = (session.getTeacherLng() != null && session.getTeacherLng() != 0.0) ? session.getTeacherLng() : TARGET_LNG;
+        Double teacherAlt = (session.getTeacherAlt() != null && session.getTeacherAlt() != 0.0) ? session.getTeacherAlt() : null;
+
+        if (!isStudentInClass(studentLat, studentLng, studentAlt, studentAccuracy, targetLat, targetLng, teacherAlt)) {
+            double distance = haversineDistance(targetLat, targetLng, studentLat, studentLng);
+            double hThreshold = (studentAccuracy != null && studentAccuracy > ACCURACY_DRIFT_THRESHOLD ? EXPANDED_HORIZONTAL_THRESHOLD : HORIZONTAL_THRESHOLD);
+            
+            // Log for debugging
+            System.out.println(String.format("[GPS DEBUG] Dist: %.1fm, Acc: %.1fm, Threshold: %.1fm", distance, (studentAccuracy != null ? studentAccuracy : 0.0), hThreshold));
+
+            // Check if it's an altitude failure specifically for better feedback
+            if (distance <= hThreshold && studentAlt != null && teacherAlt != null) {
+                double altDiff = Math.abs(studentAlt - teacherAlt);
+                if (altDiff >= VERTICAL_THRESHOLD) {
+                    return Map.of("success", false,
+                        "message", String.format("❌ Incorrect Floor — Altitude difference %.1fm is too high. Are you on the right floor?", altDiff),
+                        "distance", Math.round(distance));
+                }
+            }
+            
+            return Map.of("success", false,
+                "message", String.format("❌ Too far — you are %.0f m away. Must be within %.0f m of classroom.", distance, hThreshold),
+                "distance", Math.round(distance));
+        }
 
         // 3. Already marked present
         Optional<AttendanceRecord> recordOpt = attendanceRecordRepository.findBySessionAndStudent(session, student);
@@ -138,6 +183,40 @@ public class AttendanceService {
                  + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
                  * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    /** Checks if student is within the classroom boundaries with dynamic accuracy tolerance */
+    public boolean isStudentInClass(Double studentLat, Double studentLng, Double studentAlt, Double studentAccuracy, 
+                                   double targetLat, double targetLng, Double targetAlt) {
+        if (studentLat == null || studentLng == null) return false;
+
+        // 1. Horizontal Check (X/Y) with Accuracy-Adjusted Distance
+        double distance = haversineDistance(targetLat, targetLng, studentLat, studentLng);
+        
+        // Mathematical tolerance: if (Distance - Accuracy) <= BaseThreshold, we accept it.
+        // This accounts for the device's reported error margin.
+        double baseThreshold = HORIZONTAL_THRESHOLD;
+        double reportedAccuracy = (studentAccuracy != null) ? studentAccuracy : 0.0;
+        
+        // User's 'Buffer Zone' logic:
+        if (reportedAccuracy > ACCURACY_DRIFT_THRESHOLD) {
+            baseThreshold = EXPANDED_HORIZONTAL_THRESHOLD;
+        }
+
+        // Final decision: Distance minus accuracy must be within the threshold
+        // We use a 0.8 multiplier to be more generous with the error margin
+        if ((distance - (reportedAccuracy * 0.8)) > baseThreshold) { 
+            return false;
+        }
+
+        // 2. Vertical Check (Z/Floor) - Only if BOTH have altitude data
+        if (studentAlt != null && targetAlt != null) {
+            double altDiff = Math.abs(studentAlt - targetAlt);
+            if (altDiff >= VERTICAL_THRESHOLD) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Get active sessions
@@ -201,6 +280,18 @@ public class AttendanceService {
         session.setEndTime(LocalDateTime.now());
         sessionRepository.save(session);
         return getAttendanceSummary(sessionId);
+    }
+
+    // Close all active sessions for a teacher
+    public void closeAllActiveSessions(User teacher) {
+        List<Session> activeSessions = sessionRepository.findByTeacher(teacher).stream()
+            .filter(s -> s.getStatus() == Session.SessionStatus.ACTIVE)
+            .collect(Collectors.toList());
+        for (Session session : activeSessions) {
+            session.setStatus(Session.SessionStatus.COMPLETED);
+            session.setEndTime(LocalDateTime.now());
+            sessionRepository.save(session);
+        }
     }
 
 

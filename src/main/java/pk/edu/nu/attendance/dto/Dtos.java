@@ -77,6 +77,7 @@ public class Dtos {
         private String attendanceMode;
         private Double teacherLat;
         private Double teacherLng;
+        private Double teacherAlt;
         public CreateSessionRequest() {}
         public String getCourseName() { return courseName; }
         public void setCourseName(String courseName) { this.courseName = courseName; }
@@ -88,16 +89,24 @@ public class Dtos {
         public void setTeacherLat(Double teacherLat) { this.teacherLat = teacherLat; }
         public Double getTeacherLng() { return teacherLng; }
         public void setTeacherLng(Double teacherLng) { this.teacherLng = teacherLng; }
+        public Double getTeacherAlt() { return teacherAlt; }
+        public void setTeacherAlt(Double teacherAlt) { this.teacherAlt = teacherAlt; }
     }
 
     public static class PingRequest {
         private Double studentLat;
         private Double studentLng;
+        private Double studentAlt;
+        private Double studentAccuracy;
         public PingRequest() {}
         public Double getStudentLat() { return studentLat; }
         public void setStudentLat(Double studentLat) { this.studentLat = studentLat; }
         public Double getStudentLng() { return studentLng; }
         public void setStudentLng(Double studentLng) { this.studentLng = studentLng; }
+        public Double getStudentAlt() { return studentAlt; }
+        public void setStudentAlt(Double studentAlt) { this.studentAlt = studentAlt; }
+        public Double getStudentAccuracy() { return studentAccuracy; }
+        public void setStudentAccuracy(Double studentAccuracy) { this.studentAccuracy = studentAccuracy; }
     }
 
     public static class SessionDto {

@@ -35,7 +35,9 @@ public class StudentController {
             User student = getStudent(principal);
             Double lat = req != null ? req.getStudentLat() : null;
             Double lng = req != null ? req.getStudentLng() : null;
-            Map<String, Object> result = attendanceService.studentBluetoothPing(student, lat, lng);
+            Double alt = req != null ? req.getStudentAlt() : null;
+            Double accuracy = req != null ? req.getStudentAccuracy() : null;
+            Map<String, Object> result = attendanceService.studentBluetoothPing(student, lat, lng, alt, accuracy);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

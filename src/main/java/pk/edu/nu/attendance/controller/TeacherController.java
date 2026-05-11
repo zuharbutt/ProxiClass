@@ -36,7 +36,7 @@ public class TeacherController {
             User teacher = getTeacher(principal);
             Dtos.SessionDto session = attendanceService.createSession(
                 teacher, req.getCourseName(), req.getSection(), req.getAttendanceMode(),
-                req.getTeacherLat(), req.getTeacherLng()
+                req.getTeacherLat(), req.getTeacherLng(), req.getTeacherAlt()
             );
             return ResponseEntity.ok(session);
         } catch (Exception e) {
@@ -55,6 +55,18 @@ public class TeacherController {
     @GetMapping("/sessions/active")
     public ResponseEntity<?> getActiveSessions() {
         return ResponseEntity.ok(attendanceService.getActiveSessions());
+    }
+
+    // Close all active sessions
+    @PostMapping("/sessions/close-all")
+    public ResponseEntity<?> closeAllActiveSessions(Principal principal) {
+        try {
+            User teacher = getTeacher(principal);
+            attendanceService.closeAllActiveSessions(teacher);
+            return ResponseEntity.ok(Map.of("success", true, "message", "All active sessions closed"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     // Get students by section
