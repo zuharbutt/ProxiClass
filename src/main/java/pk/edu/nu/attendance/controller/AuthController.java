@@ -57,6 +57,24 @@ public class AuthController {
         if (!passwordEncoder.matches(req.getPassword(), user.getPassword())) {
             return ResponseEntity.status(401).body(Map.of("error", "Invalid credentials"));
         }
+
+        // --- Proxy Prevention: Fingerprint Logic ---
+        String fingerprint = req.getFingerprint();
+        if (fingerprint != null && !fingerprint.isEmpty()) {
+            // Check if this fingerprint is already used by ANOTHER student
+            Optional<User> otherUser = userRepository.findByFingerprint(fingerprint);
+            if (otherUser.isPresent() && !otherUser.get().getUsername().equals(user.getUsername())) {
+                return ResponseEntity.status(403).body(Map.of("error", 
+                    "Access Denied: This device is already registered to another student account for today's attendance."));
+            }
+            // Link fingerprint to this student if not already set
+            if (user.getFingerprint() == null || !user.getFingerprint().equals(fingerprint)) {
+                user.setFingerprint(fingerprint);
+                userRepository.save(user);
+            }
+        }
+        // ------------------------------------------
+
         String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
         return ResponseEntity.ok(new Dtos.LoginResponse(
             token, "STUDENT", user.getFullName(), user.getUsername(), user.getRollNumber()

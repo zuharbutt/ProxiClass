@@ -11,7 +11,8 @@ CREATE TABLE users (
     roll_number VARCHAR(255),
     bluetooth_mac VARCHAR(255),
     section VARCHAR(255),
-    department VARCHAR(255)
+    department VARCHAR(255),
+    fingerprint VARCHAR(255)
 );
 
 CREATE TABLE sessions (

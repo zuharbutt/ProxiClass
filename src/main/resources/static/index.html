@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="https://openfpcdn.io/fingerprintjs/v4/iife.min.js"></script>
 <script>
   if (localStorage.getItem('theme') === 'light') {
     document.documentElement.setAttribute('data-theme', 'light');
@@ -736,6 +737,9 @@ let activeSessionId = null;
 let stompClient = null;
 let manualPresentIds = new Set();
 
+// Initialize Fingerprint logic early to prevent "Cannot access before initialization"
+const fpPromise = FingerprintJS.load();
+
 // ─── ROUTING ─────────────────────────────────────────────────────────
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -759,7 +763,15 @@ async function teacherLogin() {
   err.textContent = '';
   btn.disabled = true; btn.textContent = 'Signing in...';
   try {
-    const res = await apiFetch('/api/auth/teacher/login', 'POST', {username: u, password: p}, false);
+    const fp = await fpPromise;
+    const fpResult = await fp.get();
+    const visitorId = fpResult.visitorId;
+
+    const res = await apiFetch('/api/auth/teacher/login', 'POST', {
+      username: u, 
+      password: p, 
+      fingerprint: visitorId
+    }, false);
     token = res.token; role = 'TEACHER';
     currentUser = res;
     document.getElementById('t-username-display').textContent = res.fullName;
@@ -780,7 +792,15 @@ async function studentLogin() {
   err.textContent = '';
   btn.disabled = true; btn.textContent = 'Signing in...';
   try {
-    const res = await apiFetch('/api/auth/student/login', 'POST', {username: u, password: p}, false);
+    const fp = await fpPromise;
+    const fpResult = await fp.get();
+    const visitorId = fpResult.visitorId;
+
+    const res = await apiFetch('/api/auth/student/login', 'POST', {
+      username: u, 
+      password: p, 
+      fingerprint: visitorId
+    }, false);
     token = res.token; role = 'STUDENT';
     currentUser = res;
     document.getElementById('s-username-display').textContent = res.fullName;

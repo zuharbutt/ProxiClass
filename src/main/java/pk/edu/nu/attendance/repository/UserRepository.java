@@ -13,4 +13,5 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByRoleAndSection(User.Role role, String section);
     Optional<User> findByBluetoothMac(String bluetoothMac);
     Optional<User> findByRollNumber(String rollNumber);
+    Optional<User> findByFingerprint(String fingerprint);
 }

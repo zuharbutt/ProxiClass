@@ -42,6 +42,7 @@ public class User {
     private String bluetoothMac; // Device MAC address for BT detection
     private String section;
     private String department;
+    private String fingerprint; // Unique browser fingerprint
 
     public enum Role {
         TEACHER, STUDENT
@@ -64,4 +65,6 @@ public class User {
     public void setSection(String section) { this.section = section; }
     public String getDepartment() { return department; }
     public void setDepartment(String department) { this.department = department; }
+    public String getFingerprint() { return fingerprint; }
+    public void setFingerprint(String fingerprint) { this.fingerprint = fingerprint; }
 }
