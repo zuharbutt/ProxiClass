@@ -226,6 +226,7 @@
   }
   .badge-present { background: #00c85322; color: var(--green); border: 1px solid var(--green); }
   .badge-absent { background: #ff3d3d22; color: var(--red); border: 1px solid var(--red); }
+  .badge-late { background: #ffab0022; color: var(--amber); border: 1px solid var(--amber); }
   .badge-active { background: #2979ff22; color: var(--blue); border: 1px solid var(--blue); }
   .badge-completed { background: #7a9e7a22; color: var(--text2); border: 1px solid var(--text2); }
 
@@ -243,6 +244,8 @@
   .student-row .name { flex: 1; font-size: 0.9rem; }
   .student-row .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
   .student-row.present .status-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .student-row.late { border-color: var(--amber); background: rgba(255, 171, 0, 0.1); }
+  .student-row.late .status-dot { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
 
   /* ── BT PANEL ── */
   .bt-status {
@@ -419,8 +422,8 @@
             <div class="card-title">Recent Sessions</div>
             <div class="table-wrap">
               <table id="t-recent-table">
-                <thead><tr><th>Course</th><th>Section</th><th>Mode</th><th>Date</th><th>Present</th><th>Status</th></tr></thead>
-                <tbody id="t-recent-tbody"><tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">No sessions yet</td></tr></tbody>
+                <thead><tr><th>Course</th><th>Section</th><th>Mode</th><th>Date</th><th>Present</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody id="t-recent-tbody"><tr><td colspan="7" style="color:var(--text2);text-align:center;padding:2rem">No sessions yet</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -547,8 +550,8 @@
           <div class="card">
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Course</th><th>Section</th><th>Mode</th><th>Date/Time</th><th>Present</th><th>Status</th></tr></thead>
-                <tbody id="sessions-tbody"><tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">Loading...</td></tr></tbody>
+                <thead><tr><th>Course</th><th>Section</th><th>Mode</th><th>Date/Time</th><th>Present</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody id="sessions-tbody"><tr><td colspan="7" style="color:var(--text2);text-align:center;padding:2rem">Loading...</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -580,6 +583,30 @@
                 <thead><tr><th>Roll No.</th><th>Name</th><th>Presents</th><th>Absents (Eff)</th><th>Lates (Rem)</th><th>Total Classes</th></tr></thead>
                 <tbody id="t-course-summary-tbody"><tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">Search for a course to view summary</td></tr></tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Edit Attendance Panel -->
+        <div class="panel" id="t-edit-attendance">
+          <div class="panel-title">Edit Attendance</div>
+          <div class="panel-subtitle" id="edit-session-info">Modify records for a previously marked session</div>
+          <div class="card">
+            <div class="card-title" id="edit-course-title">Session Details</div>
+            <div style="display:flex;gap:1.5rem;margin-bottom:1.5rem;font-family:var(--mono);font-size:0.8rem;color:var(--text2);flex-wrap:wrap;align-items:center">
+                <span>Session ID: <span id="edit-session-id-label" style="color:var(--amber);background:rgba(255,171,0,0.1);padding:0.15rem 0.5rem;border-radius:4px;border:1px solid rgba(255,171,0,0.3)">—</span></span>
+                <span>Section: <span id="edit-section-label" style="color:var(--text)"></span></span>
+                <span>Mode: <span id="edit-mode-label" style="color:var(--amber)"></span></span>
+                <span>Status: <span id="edit-status-label" style="color:var(--text)"></span></span>
+            </div>
+            <div style="display:flex;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap">
+              <button class="btn btn-secondary btn-sm" onclick="selectAllEdit(true)">Select All Present</button>
+              <button class="btn btn-secondary btn-sm" onclick="selectAllEdit(false)">Clear All</button>
+            </div>
+            <div class="student-list" id="edit-student-list"></div>
+            <div style="display:flex;gap:1rem;margin-top:1.5rem;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="saveEditAttendance()">💾 Save Changes</button>
+              <button class="btn btn-secondary" onclick="switchPanel('t-sessions')">Cancel</button>
             </div>
           </div>
         </div>
@@ -872,7 +899,7 @@ async function loadTeacherDashboard() {
 
     const tbody = document.getElementById('t-recent-tbody');
     if (sessions.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">No sessions yet</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:2rem">No sessions yet</td></tr>';
     } else {
       tbody.innerHTML = sessions.slice().reverse().slice(0,10).map(s => `
         <tr>
@@ -882,6 +909,9 @@ async function loadTeacherDashboard() {
           <td style="font-family:var(--mono);font-size:0.75rem;color:var(--text2)">${s.startTime}</td>
           <td style="color:var(--green);font-family:var(--mono)">${s.presentCount}/${s.totalStudents}</td>
           <td><span class="badge badge-${s.status.toLowerCase()}">${s.status}</span></td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="editSession(${s.id}, '${s.courseName}', '${s.section}', '${s.attendanceMode}', '${s.status}')">Edit</button>
+          </td>
         </tr>`).join('');
     }
   } catch(e) { console.error(e); }
@@ -892,7 +922,7 @@ async function loadTeacherSessions() {
     const sessions = await apiFetch('/api/teacher/sessions');
     const tbody = document.getElementById('sessions-tbody');
     if (sessions.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text2);text-align:center;padding:2rem">No sessions yet</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text2);text-align:center;padding:2rem">No sessions yet</td></tr>';
     } else {
       tbody.innerHTML = sessions.slice().reverse().map(s => `
         <tr>
@@ -902,6 +932,9 @@ async function loadTeacherSessions() {
           <td style="font-family:var(--mono);font-size:0.75rem;color:var(--text2)">${s.startTime}</td>
           <td style="color:var(--green);font-family:var(--mono)">${s.presentCount}/${s.totalStudents}</td>
           <td><span class="badge badge-${s.status.toLowerCase()}">${s.status}</span></td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="editSession(${s.id}, '${s.courseName}', '${s.section}', '${s.attendanceMode}', '${s.status}')">Edit</button>
+          </td>
         </tr>`).join('');
     }
   } catch(e) { console.error(e); }
@@ -1084,6 +1117,8 @@ let lastSummaryData = null;
 
 function showSummary(s) {
   lastSummaryData = s;
+  switchPanel('t-mark-attendance');
+  document.getElementById('step-create').style.display = 'none';
   document.getElementById('step-active').style.display = 'none';
   document.getElementById('step-summary').style.display = 'block';
   document.getElementById('sum-total').textContent = s.totalStudents;
@@ -1164,7 +1199,11 @@ async function downloadAttendanceExcel() {
       if (!dateHeaders.includes(headerLabel)) {
           dateHeaders.push(headerLabel);
       }
-      ss.records.forEach(r => {
+      
+      // Prefer latest data for the session we just edited/submitted
+      const recordsToUse = (ss.id === lastSummaryData.sessionId) ? lastSummaryData.records : ss.records;
+      
+      recordsToUse.forEach(r => {
         if (!studentsMap.has(r.rollNumber)) {
           studentsMap.set(r.rollNumber, { name: r.fullName, marks: {} });
         }
@@ -1252,7 +1291,96 @@ function cancelSession() {
   toast('Session cancelled', 'error');
 }
 
+// ─── EDIT ATTENDANCE ──────────────────────────────────────────────────
+let editSessionId = null;
+let editPresentIds = new Set();
+let editLateIds = new Set();
 
+async function editSession(sessionId, courseName, section, mode, status) {
+  editSessionId = sessionId;
+  document.getElementById('edit-course-title').textContent = courseName;
+  document.getElementById('edit-session-id-label').textContent = sessionId;
+  document.getElementById('edit-section-label').textContent = section;
+  document.getElementById('edit-mode-label').textContent = mode;
+  document.getElementById('edit-status-label').textContent = status;
+  
+  switchPanel('t-edit-attendance');
+  const list = document.getElementById('edit-student-list');
+  list.innerHTML = '<div style="padding:2rem; text-align:center; color:var(--text2)">Loading session records...</div>';
+  
+  try {
+    const summary = await apiFetch(`/api/teacher/session/${sessionId}/summary`);
+    editPresentIds = new Set();
+    editLateIds = new Set();
+    
+    list.innerHTML = summary.records.map(r => {
+      const isPresent = r.status === 'PRESENT';
+      const isLate = r.status === 'LATE';
+      if (isPresent) editPresentIds.add(r.studentId);
+      if (isLate) editLateIds.add(r.studentId);
+      
+      return `
+        <div class="student-row ${isPresent ? 'present' : (isLate ? 'late' : '')}" id="erow-${r.studentId}">
+          <div class="status-dot"></div>
+          <select id="esel-${r.studentId}" onchange="updateEditStudentStatus(${r.studentId}, this.value, document.getElementById('erow-${r.studentId}'))" style="width:100px; padding:0.25rem; font-size:0.8rem">
+              <option value="ABSENT" ${r.status === 'ABSENT' ? 'selected' : ''}>Absent</option>
+              <option value="PRESENT" ${isPresent ? 'selected' : ''}>Present</option>
+              <option value="LATE" ${isLate ? 'selected' : ''}>Late</option>
+          </select>
+          <span class="roll">${r.rollNumber}</span>
+          <span class="name">${r.fullName}</span>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+function updateEditStudentStatus(id, val, row) {
+  editPresentIds.delete(id);
+  editLateIds.delete(id);
+  row.classList.remove('present');
+  row.classList.remove('late');
+  
+  if (val === 'PRESENT') {
+    editPresentIds.add(id);
+    row.classList.add('present');
+  } else if (val === 'LATE') {
+    editLateIds.add(id);
+    row.classList.add('late');
+  }
+}
+
+function selectAllEdit(val) {
+  document.querySelectorAll('#edit-student-list .student-row').forEach(row => {
+    const id = parseInt(row.id.replace('erow-',''));
+    const sel = document.getElementById(`esel-${id}`);
+    if (val) {
+      sel.value = 'PRESENT';
+      updateEditStudentStatus(id, 'PRESENT', row);
+    } else {
+      sel.value = 'ABSENT';
+      updateEditStudentStatus(id, 'ABSENT', row);
+    }
+  });
+}
+
+async function saveEditAttendance() {
+  if (!editSessionId) return;
+  try {
+    const summary = await apiFetch('/api/teacher/attendance/manual', 'POST', {
+      sessionId: editSessionId,
+      presentStudentIds: Array.from(editPresentIds),
+      lateStudentIds: Array.from(editLateIds)
+    });
+    toast('Attendance updated successfully!', 'success');
+    showSummary(summary);
+    loadTeacherSessions();
+    loadTeacherDashboard();
+  } catch(e) {
+    toast(e.message || 'Failed to update attendance', 'error');
+  }
+}
 
 async function startStudentAutoCheckin() {
   async function getCoords() {
