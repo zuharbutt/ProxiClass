@@ -7,6 +7,12 @@ import pk.edu.nu.attendance.dto.Dtos;
 import pk.edu.nu.attendance.model.*;
 import pk.edu.nu.attendance.repository.*;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -269,6 +275,13 @@ public class AttendanceService {
             attendanceRecordRepository.save(record);
         }
 
+        // Sync with backend Excel file
+        try {
+            updateBackendExcelFile(sessionId);
+        } catch (Exception e) {
+            System.err.println("Error syncing with Excel: " + e.getMessage());
+        }
+
         return getAttendanceSummary(sessionId);
     }
 
@@ -279,6 +292,14 @@ public class AttendanceService {
         session.setStatus(Session.SessionStatus.COMPLETED);
         session.setEndTime(LocalDateTime.now());
         sessionRepository.save(session);
+
+        // Sync with backend Excel file
+        try {
+            updateBackendExcelFile(sessionId);
+        } catch (Exception e) {
+            System.err.println("Error syncing with Excel: " + e.getMessage());
+        }
+
         return getAttendanceSummary(sessionId);
     }
 
@@ -453,5 +474,83 @@ public class AttendanceService {
             u.getId(), u.getFullName(), u.getRollNumber(),
             u.getSection(), u.getDepartment(), u.getBluetoothMac()
         );
+    }
+
+    // Update the students_data text file with a column for this session's date
+    private synchronized void updateBackendExcelFile(Long sessionId) throws Exception {
+        Session session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+        String section = session.getSection();
+        File file = new File("students_data/" + section);
+        if (!file.exists()) {
+            System.err.println("Backend Excel file not found for section: " + section);
+            return;
+        }
+
+        List<AttendanceRecord> records = attendanceRecordRepository.findBySession(session);
+        Map<String, String> statusMap = new HashMap<>();
+        for (AttendanceRecord r : records) {
+            String mark = "A";
+            if (r.getStatus() == AttendanceRecord.AttendanceStatus.PRESENT) mark = "P";
+            else if (r.getStatus() == AttendanceRecord.AttendanceStatus.LATE) mark = "L";
+            statusMap.put(r.getStudent().getRollNumber().toLowerCase(), mark);
+        }
+
+        String dateStr = session.getStartTime().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        List<String> lines = Files.readAllLines(file.toPath());
+        if (lines.isEmpty()) return;
+
+        List<String> newLines = new ArrayList<>();
+        String header = lines.get(0);
+        String[] headerParts = header.split("\t");
+        int dateColIndex = -1;
+
+        // Check if date column already exists
+        for (int i = 0; i < headerParts.length; i++) {
+            if (headerParts[i].trim().equals(dateStr)) {
+                dateColIndex = i;
+                break;
+            }
+        }
+
+        if (dateColIndex == -1) {
+            newLines.add(header + "\t" + dateStr);
+        } else {
+            newLines.add(header);
+        }
+
+        for (int i = 1; i < lines.size(); i++) {
+            String line = lines.get(i);
+            String[] parts = line.split("\t");
+            if (parts.length < 2) {
+                newLines.add(line);
+                continue;
+            }
+
+            String rollNo = parts[1].trim().toLowerCase();
+            String status = statusMap.getOrDefault(rollNo, "A");
+
+            if (dateColIndex == -1) {
+                // Add new column
+                StringBuilder sb = new StringBuilder(line);
+                // Ensure we have enough tabs if the line was short
+                int currentCols = line.split("\t", -1).length;
+                int targetCols = headerParts.length;
+                for(int j=currentCols; j<targetCols; j++) sb.append("\t");
+                sb.append("\t").append(status);
+                newLines.add(sb.toString());
+            } else {
+                // Update existing column
+                String[] newParts = new String[Math.max(parts.length, dateColIndex + 1)];
+                Arrays.fill(newParts, "");
+                System.arraycopy(parts, 0, newParts, 0, parts.length);
+                newParts[dateColIndex] = status;
+                newLines.add(String.join("\t", newParts));
+            }
+        }
+
+        Files.write(file.toPath(), newLines);
+        System.out.println("Updated backend Excel file: " + file.getAbsolutePath() + " for date " + dateStr);
     }
 }
