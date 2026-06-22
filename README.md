@@ -1,13 +1,13 @@
-# NU Attendance System
-**Bluetooth-driven automated classroom attendance for FAST-NU**
+# ProxiClass:Automated-Attendance-System
+**Range-driven automated classroom attendance for FAST-NU**
 
-The **NU Attendance System** is a modern web application designed for FAST-NU to streamline and automate classroom attendance using student device Bluetooth MAC address verification and local location checks. It provides teachers with a real-time live feed of incoming students and automates the record-keeping process.
+The **ProxiClass** is a modern web application designed for FAST-NU to streamline and local location coordinates (both x,y) checks. It provides teachers with a real-time live feed of incoming students and automates the record-keeping process (screenshots attached at end) .
 
 ---
 
 ## ✨ High-Level Features
 
-*   **🔒 Proximity-Based Verification (No Proxies):** Prevents proxy attendance by restricting check-ins based on local network/Bluetooth proximity. **Students who are far away or outside the classroom cannot mark their attendance.**
+*   **🔒 Proximity-Based Verification (No Proxies):** Prevents proxy attendance by restricting check-ins based on local network proximity. **Students who are far away or outside the classroom cannot mark their attendance.**
 *   **⚡ Real-Time Live Feed:** When a student pings/checks in from their device, their name and roll number instantly appear on the teacher's screen in real time using WebSockets.
 *   **📊 Excel Report Generation:** Generate and download comprehensive attendance history reports in `.xlsx` format (powered by SheetJS) with a single click. The spreadsheet lists all students, dates, and summarizes effective presents/absents/lates.
 *   **⚙️ Manual Overrides:** Teachers have full control and can manually toggle student status (Present, Absent, Late) in case of device issues or special circumstances.
@@ -110,88 +110,7 @@ You can log into the system using the following seeded credentials:
 | 🧑‍🎓 **Student (BSE-4A)** | `24l-3068` | `pass123` | Log in on a **Student's Phone** (via the public ngrok URL). |
 | 🧑‍🎓 **Student (BSE-4A)** | `24l-3052` | `pass123` | Log in on a **Student's Phone** (via the public ngrok URL). |
 
----
 
-## 🛠️ How the System Works
-
-### Architecture
-```
-Browser (Teacher)          Spring Boot (Java 21)          Browser (Student)
-     |                           |                               |
-     |-- POST /session/start --> |                               |
-     |                           |-- Init attendance records     |
-     |<-- sessionId + WS sub --- |                               |
-     |                           |                               |
-     |    [WS /topic/bluetooth/sessionId]                       |
-     |                           |<-- POST /student/ping --------|
-     |                           |-- Mark present in DB          |
-     |<-- WS event (name/roll) --|                               |
-     |                           |                               |
-     |-- POST /session/submit -> |                               |
-     |<-- Summary (present/absent)|                              |
-```
-
-### Bluetooth Flow (How Device → Student Mapping Works)
-
-**The problem:** Web browsers can't read raw Bluetooth MAC addresses.
-
-**The solution implemented:**
-1. **Device Registration** — Student visits "My Device" tab, enters their MAC address once. This is stored in DB: `MAC → Roll Number`.
-2. **Teacher starts BT session** — Server marks all section students as ABSENT, opens WebSocket channel.
-3. **Student presses "Mark Present"** — Their JWT-authenticated request hits `/api/student/attendance/ping`. The server knows WHO they are (from JWT), looks up their MAC, marks them present, and broadcasts their name via WebSocket to the teacher's screen in real-time.
-4. **Teacher sees names appear live** — Each student who pings shows up on the teacher's live feed.
-5. **Teacher submits** — Final attendance locked.
-
-**For real Bluetooth (beyond web):** You'd add a Python/Node scanner on the teacher's laptop:
-```python
-# bluetooth_scanner.py (requires bluetoothctl / pybluez)
-import bluetooth, requests
-
-TOKEN = "teacher_jwt_here"
-SESSION_ID = 123
-
-nearby = bluetooth.discover_devices(lookup_names=True, duration=8)
-for addr, name in nearby:
-    requests.post(f"http://localhost:8080/api/teacher/bluetooth/detect",
-                  json={"mac": addr, "sessionId": SESSION_ID},
-                  headers={"Authorization": f"Bearer {TOKEN}"})
-```
-This would auto-detect phones/laptops without students pressing anything.
-
----
-
-## 📌 API Reference
-
-### Auth
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/teacher/login` | Teacher login → JWT |
-| POST | `/api/auth/student/login` | Student login → JWT |
-| POST | `/api/auth/student/register-device` | Register BT MAC |
-| GET  | `/api/auth/me` | Get current user info |
-
-### Teacher
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/teacher/session/start` | Start session |
-| GET  | `/api/teacher/sessions` | My sessions |
-| GET  | `/api/teacher/students/{section}` | Students by section |
-| POST | `/api/teacher/attendance/manual` | Submit manual attendance |
-| POST | `/api/teacher/session/{id}/submit` | Finalize session |
-| GET  | `/api/teacher/session/{id}/summary` | Get summary |
-
-### Student
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/student/attendance/ping` | Bluetooth ping (mark present) |
-| GET  | `/api/student/attendance/history` | My attendance history |
-| GET  | `/api/student/sessions/active` | Active sessions for my section |
-
-### WebSocket
-- Endpoint: `ws://localhost:8080/ws` (SockJS)
-- Subscribe: `/topic/bluetooth/{sessionId}` → receives `BluetoothDetectedEvent` when a student pings
-
----
 
 ## 📂 Project Structure
 ```
@@ -227,34 +146,33 @@ attendance-system/
             └── index.html                  # Complete SPA frontend
 ```
 
----
+<img width="1600" height="734" alt="image" src="https://github.com/user-attachments/assets/e483b9e0-7a89-46af-ba12-e2292d9c844c" />
 
-## 📡 Extending to Real Bluetooth
+<img width="1600" height="691" alt="image" src="https://github.com/user-attachments/assets/2b0d43de-a1f1-42cc-9ce8-052650849575" />
 
-To add native Bluetooth scanning (without student interaction):
+<img width="1600" height="733" alt="image" src="https://github.com/user-attachments/assets/67ccc844-792a-46d0-ab30-1a96eeb093b7" />
 
-### Option A: Desktop Agent (Python)
-Install on teacher's laptop. Scans BT, POSTs found MACs to the API.
-```bash
-pip install pybluez requests
-python bluetooth_agent.py --session-id 1 --token "jwt..."
-```
+<img width="1600" height="720" alt="image" src="https://github.com/user-attachments/assets/b394d11e-a129-4708-8f6d-3bc2cf01d1b1" />
 
-### Option B: Android App (Kotlin)
-Use `BluetoothAdapter.startDiscovery()`, send discovered MACs to the server. Teachers use a tablet in class.
+<img width="1600" height="729" alt="image" src="https://github.com/user-attachments/assets/89d56b81-09b9-4603-b163-b820aa7f2c02" />
 
-### Option C: Raspberry Pi Scanner
-Cheap Pi Zero W mounted in classroom. Auto-scans on session start. Fully automated — no student interaction.
+<img width="1600" height="669" alt="image" src="https://github.com/user-attachments/assets/5cfec98e-daee-45b8-a658-825dab3d1264" />
 
----
+<img width="1001" height="814" alt="image" src="https://github.com/user-attachments/assets/c1ebb9a0-a553-4d91-8786-5f2d677aeffd" />
 
-## 🗄️ Database
-H2 in-memory (resets on restart). For persistence, change `application.properties`:
-```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/nuattendance
-spring.datasource.username=postgres
-spring.datasource.password=yourpassword
-spring.jpa.hibernate.ddl-auto=update
-```
-Add PostgreSQL driver to `pom.xml`.
+Students easily marking themselves present on phones within two steps (range based detection):
+
+<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/dfaecd7d-ed6b-4394-8965-9ca26b403d2b" />
+
+<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/7071f124-5ba7-43d1-882c-075d83b3126c" />
+
+
+{Future Addition of automate classroom attendance using student device Bluetooth MAC address verification}
+
+
+
+
+
+
+
 
