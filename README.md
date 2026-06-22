@@ -162,12 +162,12 @@ attendance-system/
 
 Students easily marking themselves present on phones within two steps (range based detection):
 
-<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/dfaecd7d-ed6b-4394-8965-9ca26b403d2b" />
+<img width="250" height="550" alt="image" src="https://github.com/user-attachments/assets/dfaecd7d-ed6b-4394-8965-9ca26b403d2b" />
 
-<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/7071f124-5ba7-43d1-882c-075d83b3126c" />
+<img width="250" height="550" alt="image" src="https://github.com/user-attachments/assets/7071f124-5ba7-43d1-882c-075d83b3126c" />
 
 
-{Future Addition of automate classroom attendance using student device Bluetooth MAC address verification}
+{Future Addition of automate classroom attendance using student device Bluetooth MAC address verification welcomed}
 
 
 
